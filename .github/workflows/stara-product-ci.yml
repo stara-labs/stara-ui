@@ -44,18 +44,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build package dependencies for tests
+        run: |
+          npm run build:data-provider
+          npm run build:data-schemas
+          npm run build:api
+          npm run build:client-package
+
       - name: Run workspace Jest tests
         run: npm run test:all
 
       - name: Run component package tests
         working-directory: packages/client
         run: npm run test:ci
-
-      - name: Build package dependencies for config tests
-        run: |
-          npm run build:data-provider
-          npm run build:data-schemas
-          npm run build:api
 
       - name: Run config tests
         run: npm run test:config

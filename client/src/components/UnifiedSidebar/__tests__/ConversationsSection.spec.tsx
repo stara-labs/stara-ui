@@ -94,6 +94,32 @@ jest.mock('~/components/Nav/SearchBar', () => ({
   default: () => <div data-testid="searchbar-stub" />,
 }));
 
+jest.mock('~/components/Nav/Bookmarks/BookmarkNav', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const BookmarkNavMock = React.memo(() => {
+    mockUseGetConversationTags();
+    return React.createElement('div', { 'data-testid': 'bookmark-nav-stub' });
+  });
+  BookmarkNavMock.displayName = 'BookmarkNavMock';
+  return {
+    __esModule: true,
+    default: BookmarkNavMock,
+  };
+});
+
+jest.mock('~/components/Nav/Favorites/FavoritesList', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const FavoritesListMock = React.memo(() => {
+    mockUseFavorites();
+    return React.createElement('div', { 'data-testid': 'favorites-list-stub' });
+  });
+  FavoritesListMock.displayName = 'FavoritesListMock';
+  return {
+    __esModule: true,
+    default: FavoritesListMock,
+  };
+});
+
 jest.mock('~/components/Nav/Favorites/FavoriteItem', () => ({
   __esModule: true,
   default: () => <div data-testid="favorite-item-stub" />,
