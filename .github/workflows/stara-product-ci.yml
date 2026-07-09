@@ -1,0 +1,373 @@
+name: Stara Product CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+      - dev-staging
+      - 'release/**'
+  push:
+    branches:
+      - main
+      - dev
+      - dev-staging
+      - 'release/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stara-product-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+  NODE_OPTIONS: '--max-old-space-size=8192'
+
+jobs:
+  unit-tests:
+    name: Unit and package tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run workspace Jest tests
+        run: npm run test:all
+
+      - name: Run component package tests
+        working-directory: packages/client
+        run: npm run test:ci
+
+      - name: Build package dependencies for config tests
+        run: |
+          npm run build:data-provider
+          npm run build:data-schemas
+          npm run build:api
+
+      - name: Run config tests
+        run: npm run test:config
+
+  build:
+    name: Build all packages and app
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace
+        run: npm run build:safe
+
+  api-integration-tests:
+    name: API integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_TEST_BUCKET_NAME: ${{ secrets.AWS_TEST_BUCKET_NAME }}
+      NODE_ENV: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package dependencies
+        run: |
+          npm run build:data-provider
+          npm run build:data-schemas
+          npm run build:api
+
+      - name: Run API integration specs
+        working-directory: packages/api
+        run: npx jest --testPathPatterns="src/.*\\.integration\\.spec\\.ts$" --coverage=false --runInBand --forceExit
+
+  cache-integration-tests:
+    name: Redis cache integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      NODE_ENV: test
+      USE_REDIS: 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install Redis tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server redis-tools
+
+      - name: Start single Redis instance
+        run: |
+          redis-server --daemonize yes --port 6379
+          sleep 2
+          redis-cli -p 6379 ping
+
+      - name: Start Redis cluster
+        working-directory: redis-config
+        run: |
+          chmod +x start-cluster.sh stop-cluster.sh
+          ./start-cluster.sh
+          sleep 10
+          redis-cli -p 7001 cluster info
+          redis-cli -p 7002 cluster info
+          redis-cli -p 7003 cluster info
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package dependencies
+        run: |
+          npm run build:data-provider
+          npm run build:data-schemas
+          npm run build:api
+
+      - name: Run cache integration tests against single Redis
+        working-directory: packages/api
+        env:
+          USE_REDIS_CLUSTER: 'false'
+          REDIS_URI: redis://127.0.0.1:6379
+        run: npm run test:cache-integration
+
+      - name: Run cache integration tests against Redis cluster
+        working-directory: packages/api
+        env:
+          USE_REDIS_CLUSTER: 'true'
+          REDIS_URI: redis://127.0.0.1:7001,redis://127.0.0.1:7002,redis://127.0.0.1:7003
+        run: npm run test:cache-integration
+
+      - name: Stop Redis cluster
+        if: always()
+        working-directory: redis-config
+        run: ./stop-cluster.sh || true
+
+      - name: Stop single Redis instance
+        if: always()
+        run: redis-cli -p 6379 shutdown || true
+
+  e2e-tests:
+    name: Mock Playwright E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      E2E_CHROMIUM_CHANNEL: chrome
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright runtime dependencies
+        timeout-minutes: 5
+        run: |
+          google-chrome --version
+          npx playwright install-deps chrome
+
+      - name: Run mock E2E suite
+        run: npm run e2e:mock:ci
+
+      - name: Run enforced model-spec E2E
+        env:
+          E2E_MODEL_SPECS_ENFORCE: 'true'
+        run: npx playwright test --config=e2e/playwright.config.mock.ts enforced-model-specs.spec.ts
+
+      - name: Upload Playwright HTML report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/**
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Playwright traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: e2e/specs/.test-results/**
+          retention-days: 7
+          if-no-files-found: ignore
+
+  docker-smoke:
+    name: Docker runtime smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build client package target
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.multi
+          platforms: linux/amd64
+          push: false
+          target: client-package-build
+          cache-from: type=gha,scope=stara-ci-client-package
+          cache-to: type=gha,mode=max,scope=stara-ci-client-package
+
+      - name: Build production image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.multi
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: librechat-api-smoke:ci
+          cache-from: type=gha,scope=stara-ci-api
+          cache-to: type=gha,mode=max,scope=stara-ci-api
+
+      - name: Verify production image resolves runtime modules
+        run: |
+          docker run --rm librechat-api-smoke:ci \
+            node -e "require('@librechat/api'); require('@librechat/api/telemetry'); console.log('module resolution OK')"
+
+      - name: Boot production image and poll readiness
+        run: |
+          set -u
+          docker network create lc-smoke
+          docker run -d --name lc-mongo --network lc-smoke mongo:8.0.20
+          docker run -d --name lc-api --network lc-smoke -p 3080:3080 \
+            -e HOST=0.0.0.0 -e PORT=3080 \
+            -e NODE_ENV=production \
+            -e MONGO_URI=mongodb://lc-mongo:27017/LibreChat \
+            -e CREDS_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            -e CREDS_IV=0123456789abcdef0123456789abcdef \
+            -e JWT_SECRET=docker-smoke-jwt-secret \
+            -e JWT_REFRESH_SECRET=docker-smoke-jwt-refresh-secret \
+            -e SEARCH=false \
+            librechat-api-smoke:ci
+
+          healthy=""
+          for i in $(seq 1 60); do
+            if [ "$(docker inspect -f '{{.State.Running}}' lc-api 2>/dev/null)" != "true" ]; then
+              echo "::error::API container exited during startup (exit code $(docker inspect -f '{{.State.ExitCode}}' lc-api 2>/dev/null))"
+              break
+            fi
+            if [ "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:3080/readyz 2>/dev/null || true)" = "200" ]; then
+              healthy="yes"
+              echo "/readyz returned 200."
+              break
+            fi
+            sleep 2
+          done
+
+          echo "----- last 100 lines of api container logs -----"
+          docker logs lc-api 2>&1 | tail -100 || true
+          echo "------------------------------------------------"
+          docker rm -f lc-api lc-mongo >/dev/null 2>&1 || true
+          docker network rm lc-smoke >/dev/null 2>&1 || true
+
+          if [ -z "$healthy" ]; then
+            echo "::error::Production image failed to reach a ready /readyz within timeout"
+            exit 1
+          fi
+
+  langfuse-fanout:
+    name: Langfuse fanout Go tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: otel/langfuse-fanout/go.mod
+          cache-dependency-path: otel/langfuse-fanout/go.sum
+
+      - name: Check Go formatting
+        working-directory: otel/langfuse-fanout
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::Go files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Run Go tests
+        working-directory: otel/langfuse-fanout
+        run: go test ./...
+
+  full-suite:
+    name: Full suite result
+    runs-on: ubuntu-latest
+    needs:
+      - unit-tests
+      - build
+      - api-integration-tests
+      - cache-integration-tests
+      - e2e-tests
+      - docker-smoke
+      - langfuse-fanout
+    if: always()
+    steps:
+      - name: Fail if any CI job failed
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          node <<'NODE'
+          const needs = JSON.parse(process.env.NEEDS_JSON);
+          const failed = Object.entries(needs).filter(([, value]) => value.result !== 'success');
+          if (failed.length > 0) {
+            for (const [name, value] of failed) {
+              console.error(`${name}: ${value.result}`);
+            }
+            process.exit(1);
+          }
+          console.log('All Stara product CI jobs passed.');
+          NODE
