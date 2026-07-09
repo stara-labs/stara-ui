@@ -25,6 +25,7 @@ function AuthLayout({
   error: TranslationKeys | null;
 }) {
   const localize = useLocalize();
+  const appTitle = startupConfig?.appTitle || 'Stara';
 
   const hasStartupConfigError = startupConfigError !== null && startupConfigError !== undefined;
   const DisplayError = () => {
@@ -60,12 +61,16 @@ function AuthLayout({
     <div className="relative flex min-h-screen flex-col bg-white dark:bg-gray-900">
       <Banner />
       <BlinkAnimation active={isFetching}>
-        <div className="mt-6 h-10 w-full bg-cover">
-          <img
-            src="assets/logo.svg"
-            className="h-full w-full object-contain"
-            alt={localize('com_ui_logo', { 0: startupConfig?.appTitle ?? 'Stara' })}
-          />
+        <div className="mt-6 flex w-full justify-center">
+          <div className="flex items-center gap-3">
+            <img
+              src="assets/logo.svg"
+              className="h-10 w-10 object-contain"
+              alt=""
+              aria-hidden="true"
+            />
+            <span className="text-2xl font-semibold text-black dark:text-white">{appTitle}</span>
+          </div>
         </div>
       </BlinkAnimation>
       <DisplayError />
