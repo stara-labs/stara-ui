@@ -85,6 +85,7 @@ export enum QueryKeys {
   skillStates = 'skillStates',
   /* Stara onboarding context */
   staraOnboarding = 'staraOnboarding',
+  staraOrganizations = 'staraOrganizations',
   /* General user favorites */
   favorites = 'favorites',
 }
@@ -117,6 +118,16 @@ export enum MutationKeys {
   saveStaraOnboarding = 'saveStaraOnboarding',
   acceptStaraTenantInvite = 'acceptStaraTenantInvite',
   activateStaraTenant = 'activateStaraTenant',
+  createStaraOrganization = 'createStaraOrganization',
+  activateStaraOrganization = 'activateStaraOrganization',
+  updateStaraOrganizationMember = 'updateStaraOrganizationMember',
+  disableStaraOrganizationMember = 'disableStaraOrganizationMember',
+  createStaraOrganizationInvite = 'createStaraOrganizationInvite',
+  acceptStaraOrganizationInvite = 'acceptStaraOrganizationInvite',
+  revokeStaraOrganizationInvite = 'revokeStaraOrganizationInvite',
+  createStaraOrganizationTeam = 'createStaraOrganizationTeam',
+  updateStaraOrganizationTeam = 'updateStaraOrganizationTeam',
+  deleteStaraOrganizationTeam = 'deleteStaraOrganizationTeam',
   deleteUser = 'deleteUser',
   updateRole = 'updateRole',
   enableTwoFactor = 'enableTwoFactor',

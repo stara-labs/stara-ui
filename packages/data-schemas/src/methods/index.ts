@@ -3,6 +3,7 @@ import { createSessionMethods, DEFAULT_REFRESH_TOKEN_EXPIRY, type SessionMethods
 import { createTenantMembershipMethods, type TenantMembershipMethods } from './tenantMembership';
 import { createUserMethods, DEFAULT_SESSION_EXPIRY, type UserMethods } from './user';
 import { createFileMethods, type FileMethods, type FileOwnerScope } from './file';
+import { createTenantMethods, type TenantMethods } from './tenant';
 import { createTokenMethods, type TokenMethods } from './token';
 import { createRoleMethods, RoleConflictError } from './role';
 import { createKeyMethods, type KeyMethods } from './key';
@@ -122,6 +123,7 @@ export { MAX_TOOL_FAVORITES };
 export type AllMethods = UserMethods &
   SessionMethods &
   TokenMethods &
+  TenantMethods &
   TenantMembershipMethods &
   RoleMethods &
   KeyMethods &
@@ -252,6 +254,7 @@ export function createMethods(
     ...createUserMethods(mongoose),
     ...createSessionMethods(mongoose),
     ...createTokenMethods(mongoose),
+    ...createTenantMethods(mongoose),
     ...createTenantMembershipMethods(mongoose),
     ...roleMethods,
     ...createKeyMethods(mongoose),
@@ -298,6 +301,7 @@ export type {
   UserMethods,
   SessionMethods,
   TokenMethods,
+  TenantMethods,
   TenantMembershipMethods,
   RoleMethods,
   KeyMethods,

@@ -2602,6 +2602,10 @@ export enum SettingsTabValues {
    */
   DATA = 'data',
   /**
+   * Tab for Stara organizations
+   */
+  ORGANIZATIONS = 'organizations',
+  /**
    * Tab for Balance Settings
    */
   BALANCE = 'balance',

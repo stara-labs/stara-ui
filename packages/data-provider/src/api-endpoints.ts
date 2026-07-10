@@ -447,6 +447,25 @@ export const staraTenantInviteAccept = (inviteId: string) =>
 export const staraTenantActivate = (tenantId: string) =>
   `${staraOnboarding()}/tenants/${encodeURIComponent(tenantId)}/activate`;
 
+/* Stara organizations */
+export const staraOrganizationsContext = () => `${BASE_URL}/api/stara/organizations/context`;
+export const staraOrganizations = () => `${BASE_URL}/api/stara/organizations`;
+export const staraOrganizationActivate = (tenantId: string) =>
+  `${staraOrganizations()}/${encodeURIComponent(tenantId)}/activate`;
+export const staraOrganizationMembers = (tenantId: string) =>
+  `${staraOrganizations()}/${encodeURIComponent(tenantId)}/members`;
+export const staraOrganizationMember = (tenantId: string, userId: string) =>
+  `${staraOrganizationMembers(tenantId)}/${encodeURIComponent(userId)}`;
+export const staraOrganizationInvites = (tenantId: string) =>
+  `${staraOrganizations()}/${encodeURIComponent(tenantId)}/invites`;
+export const staraOrganizationInviteAccept = () => `${staraOrganizations()}/invites/accept`;
+export const staraOrganizationInvite = (tenantId: string, inviteId: string) =>
+  `${staraOrganizationInvites(tenantId)}/${encodeURIComponent(inviteId)}`;
+export const staraOrganizationTeams = (tenantId: string) =>
+  `${staraOrganizations()}/${encodeURIComponent(tenantId)}/teams`;
+export const staraOrganizationTeam = (tenantId: string, teamId: string) =>
+  `${staraOrganizationTeams(tenantId)}/${encodeURIComponent(teamId)}`;
+
 /* Tool favorites (starred marketplace items) */
 export const toolFavorites = () => `${BASE_URL}/api/user/settings/favorites/tools`;
 export const toolFavorite = (itemType: string, itemId: string) =>

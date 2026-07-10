@@ -15,6 +15,7 @@ import {
   AutoSendTextSelector,
   DecibelSelector,
 } from '../SettingsTabs/Speech/STT';
+import StaraOrganizationsSettings from '../SettingsTabs/Organizations/StaraOrganizations';
 import DisplayUsernameMessages from '../SettingsTabs/Account/DisplayUsernameMessages';
 import ConversationModeSwitch from '../SettingsTabs/Speech/ConversationModeSwitch';
 import EnableTwoFactorItem from '../SettingsTabs/Account/TwoFactorAuthentication';
@@ -42,7 +43,7 @@ import MemoryToggle from './MemoryToggle';
 import { TTSEndpoints } from '~/common';
 import store from '~/store';
 
-const { GENERAL, CHAT, SPEECH, DATA, ACCOUNT, ABOUT } = SettingsTabValues;
+const { GENERAL, CHAT, SPEECH, DATA, ORGANIZATIONS, ACCOUNT, ABOUT } = SettingsTabValues;
 
 export const registry: SettingEntry[] = [
   // General · Appearance
@@ -514,6 +515,16 @@ export const registry: SettingEntry[] = [
     section: 'danger',
     labelKey: 'com_ui_settings_label_clear_chats',
     Component: ClearChats,
+  },
+
+  // Organizations
+  {
+    id: 'staraOrganizations',
+    tab: ORGANIZATIONS,
+    section: 'organizations',
+    labelKey: 'com_ui_settings_label_organizations',
+    keywords: ['stara', 'org', 'organization', 'tenant', 'team', 'roles', 'invite', 'scopes'],
+    Component: StaraOrganizationsSettings,
   },
 
   // Account · Profile

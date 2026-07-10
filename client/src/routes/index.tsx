@@ -63,6 +63,11 @@ const loadStaraOnboardingView = () =>
     Component: m.default,
   }));
 
+const loadStaraInviteAcceptView = () =>
+  import('~/components/Stara/Organizations/StaraInviteAcceptView').then((m) => ({
+    Component: m.default,
+  }));
+
 const baseEl = document.querySelector('base');
 const baseHref = baseEl?.getAttribute('href') || '/';
 
@@ -205,6 +210,10 @@ export const router = createBrowserRouter(
             {
               path: 'onboarding',
               lazy: loadStaraOnboardingView,
+            },
+            {
+              path: 'organizations/invite',
+              lazy: loadStaraInviteAcceptView,
             },
             {
               path: 'stara/:section',

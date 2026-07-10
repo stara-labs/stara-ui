@@ -24,6 +24,9 @@ const buildTenantMembershipFilter = (
   if (query.status !== undefined) {
     filter.status = Array.isArray(query.status) ? { $in: query.status } : query.status;
   }
+  if (query.roleKey !== undefined) {
+    filter.roleKey = Array.isArray(query.roleKey) ? { $in: query.roleKey } : query.roleKey;
+  }
   if (query.invitedEmail !== undefined) {
     filter.invitedEmail = query.invitedEmail.trim().toLowerCase();
   }
@@ -94,6 +97,7 @@ export function createTenantMembershipMethods(mongoose: typeof import('mongoose'
           tenantId: data.tenantId,
           orgName: data.orgName,
           roleLabel: data.roleLabel,
+          roleKey: data.roleKey ?? 'member',
           status,
           isDefault: data.isDefault ?? false,
           invitedEmail: data.invitedEmail?.trim().toLowerCase(),

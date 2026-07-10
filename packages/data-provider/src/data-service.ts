@@ -77,6 +77,100 @@ export function activateStaraTenant(tenantId: string): Promise<t.TStaraOnboardin
   return request.post(endpoints.staraTenantActivate(tenantId));
 }
 
+export function getStaraOrganizationsContext(): Promise<t.TStaraOrganizationsContext> {
+  return request.get(endpoints.staraOrganizationsContext());
+}
+
+export function createStaraOrganization(
+  payload: t.TCreateStaraOrgRequest,
+): Promise<t.TStaraOrganizationsContext> {
+  return request.post(endpoints.staraOrganizations(), payload);
+}
+
+export function activateStaraOrganization(tenantId: string): Promise<t.TStaraOrganizationsContext> {
+  return request.post(endpoints.staraOrganizationActivate(tenantId));
+}
+
+export function updateStaraOrganizationMember({
+  tenantId,
+  userId,
+  payload,
+}: {
+  tenantId: string;
+  userId: string;
+  payload: t.TUpdateStaraOrgMemberRequest;
+}): Promise<t.TStaraOrganizationsContext> {
+  return request.patch(endpoints.staraOrganizationMember(tenantId, userId), payload);
+}
+
+export function disableStaraOrganizationMember({
+  tenantId,
+  userId,
+}: {
+  tenantId: string;
+  userId: string;
+}): Promise<t.TStaraOrganizationsContext> {
+  return request.delete(endpoints.staraOrganizationMember(tenantId, userId));
+}
+
+export function createStaraOrganizationInvite({
+  tenantId,
+  payload,
+}: {
+  tenantId: string;
+  payload: t.TCreateStaraOrgInviteRequest;
+}): Promise<t.TCreateStaraOrgInviteResponse> {
+  return request.post(endpoints.staraOrganizationInvites(tenantId), payload);
+}
+
+export function acceptStaraOrganizationInvite(
+  payload: t.TAcceptStaraOrgInviteRequest,
+): Promise<t.TStaraOrganizationsContext> {
+  return request.post(endpoints.staraOrganizationInviteAccept(), payload);
+}
+
+export function revokeStaraOrganizationInvite({
+  tenantId,
+  inviteId,
+}: {
+  tenantId: string;
+  inviteId: string;
+}): Promise<t.TStaraOrganizationsContext> {
+  return request.delete(endpoints.staraOrganizationInvite(tenantId, inviteId));
+}
+
+export function createStaraOrganizationTeam({
+  tenantId,
+  payload,
+}: {
+  tenantId: string;
+  payload: t.TUpsertStaraOrgTeamRequest;
+}): Promise<t.TStaraOrganizationsContext> {
+  return request.post(endpoints.staraOrganizationTeams(tenantId), payload);
+}
+
+export function updateStaraOrganizationTeam({
+  tenantId,
+  teamId,
+  payload,
+}: {
+  tenantId: string;
+  teamId: string;
+  payload: t.TUpsertStaraOrgTeamRequest;
+}): Promise<t.TStaraOrganizationsContext> {
+  return request.patch(endpoints.staraOrganizationTeam(tenantId, teamId), payload);
+}
+
+export function deleteStaraOrganizationTeam({
+  tenantId,
+  teamId,
+}: {
+  tenantId: string;
+  teamId: string;
+}): Promise<t.TStaraOrganizationsContext> {
+  return request.delete(endpoints.staraOrganizationTeam(tenantId, teamId));
+}
+
 export function getSharedMessages(shareId: string): Promise<t.TSharedMessagesResponse> {
   return request.get(endpoints.shareMessages(shareId));
 }

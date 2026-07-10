@@ -28,6 +28,7 @@ import { createPresetModel } from './preset';
 import { createPromptModel } from './prompt';
 import { createMemoryModel } from './memory';
 import { createConfigModel } from './config';
+import { createTenantModel } from './tenant';
 import { createTokenModel } from './token';
 import { createAgentModel } from './agent';
 import { createSkillModel } from './skill';
@@ -43,6 +44,7 @@ import { createKeyModel } from './key';
 export function createModels(mongoose: typeof import('mongoose')): {
   User: ReturnType<typeof createUserModel>;
   Token: ReturnType<typeof createTokenModel>;
+  Tenant: ReturnType<typeof createTenantModel>;
   TenantMembership: ReturnType<typeof createTenantMembershipModel>;
   Session: ReturnType<typeof createSessionModel>;
   Balance: ReturnType<typeof createBalanceModel>;
@@ -83,6 +85,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
   return {
     User: createUserModel(mongoose),
     Token: createTokenModel(mongoose),
+    Tenant: createTenantModel(mongoose),
     TenantMembership: createTenantMembershipModel(mongoose),
     Session: createSessionModel(mongoose),
     Balance: createBalanceModel(mongoose),
