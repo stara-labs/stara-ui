@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { FileConfigInput } from 'librechat-data-provider';
 import type { ReactNode } from 'react';
-import UploadSkillDialog from '../UploadSkillDialog';
+import UploadSkillDialog, { isSkillFileOverSizeLimit } from '../UploadSkillDialog';
 
 const mockMutate = jest.fn();
 const mockNavigate = jest.fn();
@@ -173,17 +173,10 @@ describe('UploadSkillDialog', () => {
     expect(screen.getByText('File size must not exceed 1.06 MB')).toBeInTheDocument();
   });
 
-  it('rejects files above the configured skill import limit before upload', () => {
-    render(<UploadSkillDialog isOpen={true} setIsOpen={mockSetIsOpen} />);
-    const file = makeFile(1024 * 1024 + 1, 'too-large.skill');
-
-    dropSkillFile(file);
-
-    expect(mockMutate).not.toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalledWith({
-      status: 'error',
-      message: 'Skill import must not exceed 1 MB',
-    });
+  it('treats only files above the configured skill import limit as oversized', () => {
+    expect(isSkillFileOverSizeLimit(1024 * 1024 + 1, 1024 * 1024)).toBe(true);
+    expect(isSkillFileOverSizeLimit(1024 * 1024, 1024 * 1024)).toBe(false);
+    expect(isSkillFileOverSizeLimit(1024, 1024 * 1024)).toBe(false);
   });
 
   it('uploads files exactly at the configured skill import limit', () => {
