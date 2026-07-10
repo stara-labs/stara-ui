@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Database,
   FileClock,
-  FolderKanban,
   GitBranch,
   KeyRound,
   ListChecks,
@@ -161,6 +160,11 @@ export const memoryCandidates = [
   },
 ];
 
+export const memoryCandidateMetricLabels = {
+  confidence: 'Confidence',
+  impact: 'Impact',
+};
+
 export const graphNodes = [
   { id: 'chat', label: 'Chat capture', x: 62, y: 72, kind: 'Source' },
   { id: 'drive', label: 'Drive sync', x: 170, y: 44, kind: 'Source' },
@@ -206,4 +210,17 @@ export const settingsRows: Array<[string, string, LucideIcon]> = [
   ['Owner approval rules', 'Required for shared memory', CheckCircle2],
   ['Retention tombstones', 'Resurrection allowed', FileClock],
   ['Provider movement policy', 'Fail closed', KeyRound],
+];
+
+export const staraPanelCopy = {
+  title: 'Stara',
+  subtitle: 'Control plane',
+};
+
+export const policyEnvelopeRows = [
+  'Tenant resolved',
+  'Actor scoped',
+  'Memory versioned',
+  'Response projected',
+  'Observation redacted',
 ];

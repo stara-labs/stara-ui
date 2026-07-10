@@ -1,13 +1,13 @@
 import { NavLink as RouterNavLink } from 'react-router-dom';
-import { staraSections } from './staraControlPlaneData';
+import { staraPanelCopy, staraSections } from './staraControlPlaneData';
 import { cn } from '~/utils';
 
 export default function StaraPanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-border-light px-4 py-3">
-        <div className="text-sm font-semibold text-text-primary">Stara</div>
-        <div className="mt-1 text-xs leading-5 text-text-secondary">Control plane</div>
+        <div className="text-sm font-semibold text-text-primary">{staraPanelCopy.title}</div>
+        <div className="mt-1 text-xs leading-5 text-text-secondary">{staraPanelCopy.subtitle}</div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
         {staraSections.map((section) => {

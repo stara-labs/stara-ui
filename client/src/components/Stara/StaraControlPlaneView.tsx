@@ -10,6 +10,8 @@ import {
   graphNodes,
   heartbeatRows,
   memoryCandidates,
+  memoryCandidateMetricLabels,
+  policyEnvelopeRows,
   routeRows,
   settingsRows,
   staraSectionIds,
@@ -135,8 +137,12 @@ function MemorySection() {
               </div>
               <p className="text-sm leading-6 text-text-secondary">{candidate.statement}</p>
               <div className="flex flex-wrap gap-2 text-xs text-text-secondary">
-                <span>Confidence {candidate.confidence}</span>
-                <span>Impact {candidate.impact}</span>
+                <span>
+                  {memoryCandidateMetricLabels.confidence} {candidate.confidence}
+                </span>
+                <span>
+                  {memoryCandidateMetricLabels.impact} {candidate.impact}
+                </span>
                 <span>{candidate.id}</span>
               </div>
             </div>
@@ -287,6 +293,7 @@ function ApprovalsSection() {
 
 function GenericSection({ sectionId }: { sectionId: StaraSectionId }) {
   const section = staraSections.find((item) => item.id === sectionId)!;
+  const values = [section.metric, section.status, 'Ready'];
   return (
     <Panel title={`${section.label} Detail`} eyebrow="Seeded V1 surface">
       <div className="grid gap-3 md:grid-cols-3">
@@ -296,9 +303,7 @@ function GenericSection({ sectionId }: { sectionId: StaraSectionId }) {
             className="min-h-32 rounded-lg border border-border-light bg-surface-primary p-4"
           >
             <div className="text-sm font-semibold text-text-primary">{label}</div>
-            <div className="mt-6 text-2xl font-semibold text-text-primary">
-              {index === 0 ? section.metric : index === 1 ? section.status : 'Ready'}
-            </div>
+            <div className="mt-6 text-2xl font-semibold text-text-primary">{values[index]}</div>
             <div className="mt-2 text-sm leading-6 text-text-secondary">{section.description}</div>
           </div>
         ))}
@@ -322,11 +327,9 @@ function StatusRail() {
       </Panel>
       <Panel title="Policy Envelope" eyebrow="Every request">
         <div className="grid gap-2 text-sm text-text-secondary">
-          <span>Tenant resolved</span>
-          <span>Actor scoped</span>
-          <span>Memory versioned</span>
-          <span>Response projected</span>
-          <span>Observation redacted</span>
+          {policyEnvelopeRows.map((row) => (
+            <span key={row}>{row}</span>
+          ))}
         </div>
       </Panel>
     </>
