@@ -51,8 +51,6 @@ export default function useUnifiedSidebarLinks() {
   });
 
   const links = useMemo(() => {
-    // Stara is a first-class sidebar workspace beside chat history; the panel
-    // deep-links into /stara routes while leaving the existing chat shell intact.
     const conversationLink: NavLink = {
       title: 'com_ui_chat_history',
       label: '',
@@ -68,7 +66,9 @@ export default function useUnifiedSidebarLinks() {
       Component: StaraPanel,
     };
 
-    return [conversationLink, staraLink, ...sideNavLinks];
+    // Keep chat history as the default panel, then place Stara after the built-in
+    // tool panels so the control plane lands in the lower rail near MCP.
+    return [conversationLink, ...sideNavLinks, staraLink];
   }, [sideNavLinks]);
 
   return links;
