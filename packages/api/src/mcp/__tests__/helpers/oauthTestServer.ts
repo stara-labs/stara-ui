@@ -556,6 +556,19 @@ export class InMemoryTokenStore {
     return null;
   }) as unknown as TokenMethods['findToken'];
 
+  findTokens = (async (filter: {
+    userId?: string;
+    type?: string;
+    identifier?: string;
+  }): Promise<InMemoryToken[]> => {
+    return [...this.tokens.values()].filter((token) => {
+      const matchUserId = !filter.userId || token.userId === filter.userId;
+      const matchType = !filter.type || token.type === filter.type;
+      const matchIdentifier = !filter.identifier || token.identifier === filter.identifier;
+      return matchUserId && matchType && matchIdentifier;
+    });
+  }) as unknown as TokenMethods['findTokens'];
+
   createToken = (async (data: {
     userId: string;
     type: string;

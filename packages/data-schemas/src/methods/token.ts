@@ -5,10 +5,42 @@ import logger from '~/config/winston';
 // Factory function that takes mongoose instance and returns the methods
 export function createTokenMethods(mongoose: typeof import('mongoose')): {
   findToken: (query: TokenQuery, options?: QueryOptions) => Promise<IToken | null>;
+  findTokens: (query: TokenQuery, options?: QueryOptions) => Promise<IToken[]>;
   createToken: (tokenData: TokenCreateData) => Promise<IToken>;
   updateToken: (query: TokenQuery, updateData: TokenUpdateData) => Promise<IToken | null>;
   deleteTokens: (query: TokenQuery) => Promise<TokenDeleteResult>;
 } {
+  function buildTokenConditions(query: TokenQuery): Record<string, unknown>[] {
+    const conditions: Record<string, unknown>[] = [];
+
+    if (query._id !== undefined) {
+      conditions.push({ _id: query._id });
+    }
+    if (query.userId !== undefined) {
+      conditions.push({ userId: query.userId });
+    }
+    if (query.token !== undefined) {
+      conditions.push({ token: query.token });
+    }
+    if (query.email !== undefined) {
+      const email = query.email === null ? null : query.email.trim().toLowerCase();
+      conditions.push({ email });
+    }
+    if (query.type !== undefined) {
+      conditions.push({ type: query.type });
+    }
+    if (query.identifier !== undefined) {
+      conditions.push({ identifier: query.identifier });
+    }
+    if (query.tenantId !== undefined) {
+      conditions.push(
+        query.tenantId === null ? { tenantId: { $exists: false } } : { tenantId: query.tenantId },
+      );
+    }
+
+    return conditions;
+  }
+
   /**
    * Creates a new Token instance.
    */
@@ -57,24 +89,7 @@ export function createTokenMethods(mongoose: typeof import('mongoose')): {
   async function deleteTokens(query: TokenQuery): Promise<TokenDeleteResult> {
     try {
       const Token = mongoose.models.Token;
-      const conditions = [];
-
-      if (query.userId !== undefined) {
-        conditions.push({ userId: query.userId });
-      }
-      if (query.token !== undefined) {
-        conditions.push({ token: query.token });
-      }
-      if (query.email !== undefined) {
-        const email = query.email === null ? null : query.email.trim().toLowerCase();
-        conditions.push({ email });
-      }
-      if (query.type !== undefined) {
-        conditions.push({ type: query.type });
-      }
-      if (query.identifier !== undefined) {
-        conditions.push({ identifier: query.identifier });
-      }
+      const conditions = buildTokenConditions(query);
 
       if (conditions.length === 0) {
         throw new Error('At least one query parameter must be provided');
@@ -96,24 +111,7 @@ export function createTokenMethods(mongoose: typeof import('mongoose')): {
   async function findToken(query: TokenQuery, options?: QueryOptions): Promise<IToken | null> {
     try {
       const Token = mongoose.models.Token;
-      const conditions = [];
-
-      if (query.userId) {
-        conditions.push({ userId: query.userId });
-      }
-      if (query.token) {
-        conditions.push({ token: query.token });
-      }
-      if (query.email !== undefined) {
-        const email = query.email === null ? null : query.email.trim().toLowerCase();
-        conditions.push({ email });
-      }
-      if (query.type !== undefined) {
-        conditions.push({ type: query.type });
-      }
-      if (query.identifier !== undefined) {
-        conditions.push({ identifier: query.identifier });
-      }
+      const conditions = buildTokenConditions(query);
 
       const token = await Token.findOne({ $and: conditions }, null, options).lean();
 
@@ -124,9 +122,26 @@ export function createTokenMethods(mongoose: typeof import('mongoose')): {
     }
   }
 
+  async function findTokens(query: TokenQuery, options?: QueryOptions): Promise<IToken[]> {
+    try {
+      const Token = mongoose.models.Token;
+      const conditions = buildTokenConditions(query);
+
+      if (conditions.length === 0) {
+        throw new Error('At least one query parameter must be provided');
+      }
+
+      return await Token.find({ $and: conditions }, null, options).lean<IToken[]>();
+    } catch (error) {
+      logger.debug('An error occurred while finding tokens:', error);
+      throw error;
+    }
+  }
+
   // Return all methods
   return {
     findToken,
+    findTokens,
     createToken,
     updateToken,
     deleteTokens,

@@ -20,14 +20,17 @@ export interface TokenCreateData {
   token: string;
   expiresIn: number;
   metadata?: Record<string, unknown> | Map<string, unknown>;
+  tenantId?: string;
 }
 
 export interface TokenQuery {
+  _id?: Types.ObjectId | string;
   userId?: Types.ObjectId | string;
   token?: string;
   email?: string | null;
   type?: string | null;
   identifier?: string | RegExp | null;
+  tenantId?: string | null;
 }
 
 export interface TokenUpdateData {

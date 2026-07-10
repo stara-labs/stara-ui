@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 import type { FullConfig, Page } from '@playwright/test';
 import type { User } from '../types';
 import cleanupUser from './cleanupUser';
+import { completeStaraOnboarding, getAccessToken } from './staraOnboarding';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -41,12 +42,12 @@ function appURL(baseURL: string, pathname = '') {
 }
 
 async function authenticate(config: FullConfig, user: User) {
-  console.log('🤖: global setup has been started');
+  console.log('E2E global setup started');
   const { baseURL, storageState } = config.projects[0].use;
-  console.log('🤖: using baseURL', baseURL);
-  console.log('🤖: using E2E user:', user.email);
+  console.log('E2E baseURL:', baseURL);
+  console.log('E2E user:', user.email);
   if (typeof storageState !== 'string') {
-    throw new Error('🤖: storageState must be a file path');
+    throw new Error('E2E storageState must be a file path');
   }
 
   const browser = await chromium.launch({
@@ -55,50 +56,54 @@ async function authenticate(config: FullConfig, user: User) {
   });
   try {
     const page = await browser.newPage();
-    console.log('🤖: 🗝  authenticating user:', user.email);
+    console.log('Authenticating E2E user:', user.email);
 
     if (typeof baseURL !== 'string') {
-      throw new Error('🤖: baseURL is not defined');
+      throw new Error('E2E baseURL is not defined');
     }
     const conversationURL = appURL(baseURL, 'c/new');
     const loginURL = appURL(baseURL, 'login');
 
-    // Set localStorage before navigating to the page
     await page.context().addInitScript(() => {
       localStorage.setItem('navVisible', 'true');
     });
-    console.log('🤖: ✔️  localStorage: set Nav as Visible', storageState);
+    console.log('E2E localStorage set nav visible:', storageState);
 
     await page.goto(baseURL, { timeout });
     await register(page, user);
     try {
       await page.waitForURL(conversationURL, { timeout });
     } catch (error) {
-      console.error('Error:', error);
+      console.error('E2E registration error:', error);
       if (await registrationErrorIsVisible(page)) {
-        console.log('🤖: 🚨  user already exists');
+        console.log('E2E user already exists, cleaning up and retrying');
         await cleanupUser(user);
         await page.goto(baseURL, { timeout });
         await register(page, user);
         await page.waitForURL(conversationURL, { timeout });
       } else {
-        throw new Error('🤖: 🚨  user failed to register');
+        throw new Error('E2E user failed to register');
       }
     }
-    console.log('🤖: ✔️  user successfully registered');
+    console.log('E2E user successfully registered');
 
     await page.goto(loginURL, { timeout });
     await login(page, user);
     await page.waitForURL(conversationURL, { timeout });
-    console.log('🤖: ✔️  user successfully authenticated');
+    const token = await getAccessToken(page);
+    await completeStaraOnboarding(page.context().request, {
+      baseURL,
+      seededBy: 'e2e-authenticate',
+      token,
+    });
+    console.log('Stara onboarding completed for E2E user');
+    console.log('E2E user successfully authenticated');
 
     await page.context().storageState({ path: storageState });
-    console.log('🤖: ✔️  authentication state successfully saved in', storageState);
-    // await browser.close();
-    // console.log('🤖: global setup has been finished');
+    console.log('E2E authentication state saved in', storageState);
   } finally {
     await browser.close();
-    console.log('🤖: global setup has been finished');
+    console.log('E2E global setup finished');
   }
 }
 

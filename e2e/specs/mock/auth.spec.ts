@@ -3,6 +3,7 @@ import type { APIRequestContext } from '@playwright/test';
 import type { User } from '../../types';
 import { getSecondaryE2EUser } from '../../setup/users.mock';
 import cleanupUser from '../../setup/cleanupUser';
+import { completeStaraOnboarding } from '../../setup/staraOnboarding';
 import { NEW_CHAT_PATH } from './helpers';
 
 type AuthRecoveryTestEvent = {
@@ -45,6 +46,11 @@ async function getIsolatedStorageState(request: APIRequestContext, user: User) {
     },
   });
   expect(loginResponse.ok()).toBeTruthy();
+  const loginPayload = (await loginResponse.json()) as { token?: string };
+  if (!loginPayload.token) {
+    throw new Error('Expected login response to include a bearer token');
+  }
+  await completeStaraOnboarding(request, { seededBy: 'auth-spec', token: loginPayload.token });
 
   return request.storageState();
 }

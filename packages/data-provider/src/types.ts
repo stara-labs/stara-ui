@@ -216,6 +216,98 @@ export type TBackupCode = {
   usedAt: Date | null;
 };
 
+export type StaraOnboardingMode =
+  | 'personal'
+  | 'business_setup'
+  | 'business_join'
+  | 'business_join_pending';
+
+export type StaraTenantMembershipStatus = 'active' | 'invited' | 'disabled';
+
+export type TStaraOnboardingRecord = {
+  completedAt?: string | Date;
+  mode?: StaraOnboardingMode | 'tenant_addendum';
+  recommendedStart?: string;
+  readinessScore?: number;
+  responses?: Record<string, unknown>;
+  version?: number;
+};
+
+export type TStaraOnboardingState = {
+  version: number;
+  account: TStaraOnboardingRecord | null;
+  tenantAddenda: Record<string, TStaraOnboardingRecord>;
+  updatedAt?: string | Date | null;
+};
+
+export type TStaraTenantMembership = {
+  id: string;
+  tenantId: string;
+  orgName: string;
+  roleLabel: string;
+  status: StaraTenantMembershipStatus;
+  isDefault: boolean;
+  source?: 'stara' | 'legacy' | 'invite';
+  scopeIds: string[];
+  groupIds: string[];
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
+};
+
+export type TStaraTenantInvite = {
+  id: string;
+  tenantId: string;
+  orgName: string;
+  roleLabel: string;
+  invitedByName?: string;
+  expiresAt?: string | Date;
+  createdAt?: string | Date;
+};
+
+export type TStaraAccessGroup = {
+  id: string;
+  name: string;
+  source: 'local' | 'entra';
+  idOnTheSource?: string | null;
+  description?: string;
+};
+
+export type TStaraAccessGrant = {
+  id?: string;
+  principalType: string;
+  capability: string;
+  tenantId?: string | null;
+};
+
+export type TStaraOnboardingContext = {
+  version: number;
+  account: {
+    completed: boolean;
+    onboarding: TStaraOnboardingRecord | null;
+  };
+  onboarding: TStaraOnboardingState;
+  memberships: TStaraTenantMembership[];
+  activeMembership: TStaraTenantMembership | null;
+  pendingInvites: TStaraTenantInvite[];
+  access: {
+    tenantId: string | null;
+    scopes: string[];
+    groups: TStaraAccessGroup[];
+    grants: TStaraAccessGrant[];
+    restrictedAreas: string[];
+  };
+  requiresOnboarding: boolean;
+  requiresTenantAddendum: boolean;
+};
+
+export type TSaveStaraOnboardingRequest = {
+  mode: StaraOnboardingMode | 'tenant_addendum';
+  tenantId?: string;
+  recommendedStart?: string;
+  readinessScore?: number;
+  responses?: Record<string, unknown>;
+};
+
 export type TUser = {
   id: string;
   username: string;
@@ -230,6 +322,7 @@ export type TUser = {
   backupCodes?: TBackupCode[];
   personalization?: {
     memories?: boolean;
+    staraOnboarding?: TStaraOnboardingState;
   };
   createdAt: string;
   updatedAt: string;

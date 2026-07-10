@@ -59,6 +59,24 @@ export function updateSkillStates(
   return request.post(endpoints.skillStates(), { skillStates });
 }
 
+export function getStaraOnboardingContext(): Promise<t.TStaraOnboardingContext> {
+  return request.get(endpoints.staraOnboardingContext());
+}
+
+export function saveStaraOnboarding(
+  payload: t.TSaveStaraOnboardingRequest,
+): Promise<t.TStaraOnboardingContext> {
+  return request.put(endpoints.staraOnboarding(), payload);
+}
+
+export function acceptStaraTenantInvite(inviteId: string): Promise<t.TStaraOnboardingContext> {
+  return request.post(endpoints.staraTenantInviteAccept(inviteId));
+}
+
+export function activateStaraTenant(tenantId: string): Promise<t.TStaraOnboardingContext> {
+  return request.post(endpoints.staraTenantActivate(tenantId));
+}
+
 export function getSharedMessages(shareId: string): Promise<t.TSharedMessagesResponse> {
   return request.get(endpoints.shareMessages(shareId));
 }

@@ -199,6 +199,7 @@ describe('MCPConnectionFactory OAuth against real SDK Streamable HTTP server', (
         flowManager: createFlowManager(),
         tokenMethods: {
           findToken: tokenStore.findToken,
+          findTokens: tokenStore.findTokens,
           createToken: tokenStore.createToken,
           updateToken: tokenStore.updateToken,
           deleteTokens: tokenStore.deleteTokens,
@@ -256,6 +257,7 @@ describe('MCPConnectionFactory OAuth against real SDK Streamable HTTP server', (
           flowManager: createFlowManager(),
           tokenMethods: {
             findToken: tokenStore.findToken,
+            findTokens: tokenStore.findTokens,
             createToken: tokenStore.createToken,
             updateToken: tokenStore.updateToken,
             deleteTokens: tokenStore.deleteTokens,

@@ -1,5 +1,5 @@
-import type { Redis, Cluster } from 'ioredis';
 import { logger } from '@librechat/data-schemas';
+import type { Redis, Cluster } from 'ioredis';
 import { createMockPublisher } from './helpers/publisher';
 
 logger.silent = true;
@@ -197,11 +197,11 @@ describe('RedisEventTransport Integration Tests', () => {
       const streamId = `order-test-${Date.now()}`;
       const receivedEvents: number[] = [];
 
-      transport.subscribe(streamId, {
+      const subscription = transport.subscribe(streamId, {
         onChunk: (event) => receivedEvents.push((event as { index: number }).index),
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await subscription.ready;
 
       // Emit 20 events rapidly with await - they should arrive in order
       for (let i = 0; i < 20; i++) {
@@ -217,6 +217,7 @@ describe('RedisEventTransport Integration Tests', () => {
         expect(receivedEvents[i]).toBe(i);
       }
 
+      subscription.unsubscribe();
       transport.destroy();
       subscriber.disconnect();
     });
@@ -235,7 +236,7 @@ describe('RedisEventTransport Integration Tests', () => {
       const streamId = `tool-delta-order-${Date.now()}`;
       const receivedArgs: string[] = [];
 
-      transport.subscribe(streamId, {
+      const subscription = transport.subscribe(streamId, {
         onChunk: (event) => {
           const data = event as {
             event: string;
@@ -247,7 +248,7 @@ describe('RedisEventTransport Integration Tests', () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await subscription.ready;
 
       // Simulate streaming tool call arguments like: {"code": "# First line\n..."
       const argChunks = ['{"code"', ': "', '# First', ' line', '\\n', '..."', '}'];
@@ -271,6 +272,7 @@ describe('RedisEventTransport Integration Tests', () => {
       expect(receivedArgs).toEqual(argChunks);
       expect(receivedArgs.join('')).toBe('{"code": "# First line\\n..."}');
 
+      subscription.unsubscribe();
       transport.destroy();
       subscriber.disconnect();
     });
@@ -292,14 +294,14 @@ describe('RedisEventTransport Integration Tests', () => {
       const stream1Events: number[] = [];
       const stream2Events: number[] = [];
 
-      transport.subscribe(streamId1, {
+      const subscription1 = transport.subscribe(streamId1, {
         onChunk: (event) => stream1Events.push((event as { index: number }).index),
       });
-      transport.subscribe(streamId2, {
+      const subscription2 = transport.subscribe(streamId2, {
         onChunk: (event) => stream2Events.push((event as { index: number }).index),
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await Promise.all([subscription1.ready, subscription2.ready]);
 
       // Interleave events from both streams
       for (let i = 0; i < 10; i++) {
@@ -313,6 +315,8 @@ describe('RedisEventTransport Integration Tests', () => {
       expect(stream1Events).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
       expect(stream2Events).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80, 90]);
 
+      subscription1.unsubscribe();
+      subscription2.unsubscribe();
       transport.destroy();
       subscriber.disconnect();
     });
