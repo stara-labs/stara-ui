@@ -19,6 +19,7 @@ import DisplayUsernameMessages from '../SettingsTabs/Account/DisplayUsernameMess
 import ConversationModeSwitch from '../SettingsTabs/Speech/ConversationModeSwitch';
 import EnableTwoFactorItem from '../SettingsTabs/Account/TwoFactorAuthentication';
 import ImportConversations from '../SettingsTabs/Data/ImportConversations';
+import StaraOnboardingSettings from '../SettingsTabs/Data/StaraOnboarding';
 import { toggleControl, ThemeSetting, LangSetting } from './controls';
 import BackupCodesItem from '../SettingsTabs/Account/BackupCodesItem';
 import { EngineSTTSetting, EngineTTSSetting } from './SpeechControls';
@@ -450,6 +451,14 @@ export const registry: SettingEntry[] = [
     keywords: ['memory', 'personalization'],
     show: (ctx) => ctx.hasMemoryOptOut,
     Component: MemoryToggle,
+  },
+  {
+    id: 'staraOnboarding',
+    tab: DATA,
+    section: 'memory',
+    labelKey: 'com_ui_settings_label_stara_onboarding',
+    keywords: ['stara', 'onboarding', 'org', 'tenant', 'membership', 'invite'],
+    Component: StaraOnboardingSettings,
   },
   // Data controls · Your data
   {

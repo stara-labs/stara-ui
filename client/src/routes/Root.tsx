@@ -16,6 +16,7 @@ import {
   useAgentsMap,
   useFileMap,
 } from '~/hooks';
+import StaraOnboardingGate from '~/components/Stara/Onboarding/StaraOnboardingGate';
 import KeyboardShortcutsDialog from '~/components/Nav/KeyboardShortcutsDialog';
 import KeyboardDeleteDialog from '~/components/Nav/KeyboardDeleteDialog';
 import { useUserTermsQuery, useGetStartupConfig } from '~/data-provider';
@@ -96,7 +97,9 @@ export default function Root() {
                     }}
                     inert={isSmallScreen && sidebarExpanded ? '' : undefined}
                   >
-                    <Outlet />
+                    <StaraOnboardingGate>
+                      <Outlet />
+                    </StaraOnboardingGate>
                   </div>
                 </div>
               </div>

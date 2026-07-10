@@ -83,6 +83,8 @@ export enum QueryKeys {
   toolFavorites = 'toolFavorites',
   /* Per-user skill active/inactive overrides */
   skillStates = 'skillStates',
+  /* Stara onboarding context */
+  staraOnboarding = 'staraOnboarding',
   /* General user favorites */
   favorites = 'favorites',
 }
@@ -112,6 +114,9 @@ export enum MutationKeys {
   deleteAction = 'deleteAction',
   deleteAgentAction = 'deleteAgentAction',
   revertAgentVersion = 'revertAgentVersion',
+  saveStaraOnboarding = 'saveStaraOnboarding',
+  acceptStaraTenantInvite = 'acceptStaraTenantInvite',
+  activateStaraTenant = 'activateStaraTenant',
   deleteUser = 'deleteUser',
   updateRole = 'updateRole',
   enableTwoFactor = 'enableTwoFactor',

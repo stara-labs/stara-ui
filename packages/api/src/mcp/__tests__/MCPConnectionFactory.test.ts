@@ -341,6 +341,7 @@ describe('MCPConnectionFactory', () => {
         flowManager: mockFlowManager,
         tokenMethods: {
           findToken: undefined as unknown as TokenMethods['findToken'],
+          findTokens: jest.fn(),
           createToken: jest.fn(),
           updateToken: jest.fn(),
           deleteTokens: jest.fn(),
@@ -2031,6 +2032,7 @@ describe('MCPConnectionFactory', () => {
           returnOnOAuth: true,
           tokenMethods: {
             findToken: jest.fn(),
+            findTokens: jest.fn(),
             createToken: jest.fn(),
             updateToken: jest.fn(),
             deleteTokens: jest.fn(),
@@ -2133,6 +2135,7 @@ describe('MCPConnectionFactory', () => {
         oauthStart: staleOAuthStart,
         tokenMethods: {
           findToken: jest.fn(),
+          findTokens: jest.fn(),
           createToken: jest.fn(),
           updateToken: jest.fn(),
           deleteTokens: jest.fn(),
@@ -2153,6 +2156,7 @@ describe('MCPConnectionFactory', () => {
           oauthStart: liveOAuthStart,
           tokenMethods: {
             findToken: jest.fn(),
+            findTokens: jest.fn(),
             createToken: jest.fn(),
             updateToken: jest.fn(),
             deleteTokens: jest.fn(),

@@ -19,6 +19,71 @@ import useUpdateTagsInConvo from '~/hooks/Conversations/useUpdateTagsInConvo';
 import { updateConversationTag } from '~/utils/conversationTags';
 import { useConversationTagsQuery } from './queries';
 
+export const useSaveStaraOnboardingMutation = (
+  options?: t.MutationOptions<t.TStaraOnboardingContext, t.TSaveStaraOnboardingRequest>,
+): UseMutationResult<
+  t.TStaraOnboardingContext,
+  unknown,
+  t.TSaveStaraOnboardingRequest,
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.saveStaraOnboarding],
+    (payload: t.TSaveStaraOnboardingRequest) => dataService.saveStaraOnboarding(payload),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        queryClient.setQueryData([QueryKeys.staraOnboarding], data);
+        queryClient.invalidateQueries([QueryKeys.user]);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useAcceptStaraTenantInviteMutation = (
+  options?: t.MutationOptions<t.TStaraOnboardingContext, string>,
+): UseMutationResult<t.TStaraOnboardingContext, unknown, string, unknown> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.acceptStaraTenantInvite],
+    (inviteId: string) => dataService.acceptStaraTenantInvite(inviteId),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        queryClient.setQueryData([QueryKeys.staraOnboarding], data);
+        queryClient.invalidateQueries([QueryKeys.user]);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useActivateStaraTenantMutation = (
+  options?: t.MutationOptions<t.TStaraOnboardingContext, string>,
+): UseMutationResult<t.TStaraOnboardingContext, unknown, string, unknown> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.activateStaraTenant],
+    (tenantId: string) => dataService.activateStaraTenant(tenantId),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        queryClient.setQueryData([QueryKeys.staraOnboarding], data);
+        queryClient.invalidateQueries([QueryKeys.user]);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
 export const useUpdateConversationMutation = (
   id: string,
 ): UseMutationResult<

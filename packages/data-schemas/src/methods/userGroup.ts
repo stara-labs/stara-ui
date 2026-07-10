@@ -296,11 +296,6 @@ export function createUserGroupMethods(
     }
 
     const cacheKey = scopedCacheKey(memberId);
-    const fastPath = await readCachedGroupIds(cache, cacheKey);
-    if (fastPath) {
-      return fastPath;
-    }
-
     const pending = pendingGroupLookups.get(cacheKey);
     if (pending) {
       return pending.promise;
@@ -316,6 +311,11 @@ export function createUserGroupMethods(
     const lookup = (async (): Promise<Types.ObjectId[]> => {
       let lockToken: string | null | undefined;
       try {
+        const fastPath = await readCachedGroupIds(cache, cacheKey);
+        if (fastPath) {
+          return fastPath;
+        }
+
         if (cache.acquireLock) {
           let lockFailed = false;
           try {

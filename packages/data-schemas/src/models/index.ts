@@ -1,4 +1,5 @@
 import { createSkillSyncCredentialModel } from './skillSyncCredential';
+import { createTenantMembershipModel } from './tenantMembership';
 import { createSkillSyncStatusModel } from './skillSyncStatus';
 import { createConversationTagModel } from './conversationTag';
 import { createAgentCategoryModel } from './agentCategory';
@@ -42,6 +43,7 @@ import { createKeyModel } from './key';
 export function createModels(mongoose: typeof import('mongoose')): {
   User: ReturnType<typeof createUserModel>;
   Token: ReturnType<typeof createTokenModel>;
+  TenantMembership: ReturnType<typeof createTenantMembershipModel>;
   Session: ReturnType<typeof createSessionModel>;
   Balance: ReturnType<typeof createBalanceModel>;
   Conversation: ReturnType<typeof createConversationModel>;
@@ -81,6 +83,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
   return {
     User: createUserModel(mongoose),
     Token: createTokenModel(mongoose),
+    TenantMembership: createTenantMembershipModel(mongoose),
     Session: createSessionModel(mongoose),
     Balance: createBalanceModel(mongoose),
     Conversation: createConversationModel(mongoose),

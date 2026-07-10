@@ -780,7 +780,7 @@ describe('userGroup methods', () => {
 
       expect(first).toEqual(second);
       expect(second).toEqual(third);
-      expect(cache.get).toHaveBeenCalledTimes(3);
+      expect(cache.get).toHaveBeenCalledTimes(1);
       expect(cache.set).toHaveBeenCalledTimes(1);
     });
 

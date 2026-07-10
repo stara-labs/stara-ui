@@ -2,6 +2,28 @@ import type { RefillIntervalUnit, TUserFavorite } from 'librechat-data-provider'
 import type { Document, Types } from 'mongoose';
 import { CursorPaginationParams } from '~/common';
 
+export type StaraOnboardingMode =
+  | 'personal'
+  | 'business_setup'
+  | 'business_join'
+  | 'business_join_pending';
+
+export interface StaraOnboardingRecord {
+  completedAt?: Date | string;
+  mode?: StaraOnboardingMode | 'tenant_addendum';
+  recommendedStart?: string;
+  readinessScore?: number;
+  responses?: Record<string, unknown>;
+  version?: number;
+}
+
+export interface StaraOnboardingState {
+  account?: StaraOnboardingRecord | null;
+  tenantAddenda?: Record<string, StaraOnboardingRecord>;
+  updatedAt?: Date | string | null;
+  version?: number;
+}
+
 export interface IUser extends Document {
   _id: Types.ObjectId;
   /**
@@ -51,6 +73,7 @@ export interface IUser extends Document {
   termsAcceptedAt?: Date | null;
   personalization?: {
     memories?: boolean;
+    staraOnboarding?: StaraOnboardingState;
   };
   favorites?: TUserFavorite[];
   /** Per-skill active/inactive overrides. Key = skillId, value = active state. */
@@ -97,6 +120,7 @@ export interface UpdateUserRequest {
   termsAcceptedAt?: Date | null;
   personalization?: {
     memories?: boolean;
+    staraOnboarding?: StaraOnboardingState;
   };
   skillStates?: Record<string, boolean>;
 }

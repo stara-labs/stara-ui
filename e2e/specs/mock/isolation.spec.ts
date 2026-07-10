@@ -4,6 +4,7 @@ import type { User } from '../../types';
 import { MOCK_ENDPOINTS, NEW_CHAT_PATH, selectMockEndpoint, sendMessage } from './helpers';
 import { getSecondaryE2EUser } from '../../setup/users.mock';
 import cleanupUser from '../../setup/cleanupUser';
+import { completeStaraOnboarding, getAccessToken } from '../../setup/staraOnboarding';
 
 const A_PRIVATE_MARKER = 'A-private-conversation-marker';
 
@@ -58,6 +59,12 @@ async function ensureSecondaryUser(browser: Browser, page: Page, user: User, bas
   await page.getByLabel('Password').fill(user.password);
   await page.getByTestId('login-button').click();
   await page.waitForURL(/\/c\/new/, { timeout: 10000 });
+  const token = await getAccessToken(page);
+  await completeStaraOnboarding(page.context().request, {
+    baseURL,
+    seededBy: 'isolation-spec',
+    token,
+  });
 }
 
 test.describe('user isolation', () => {

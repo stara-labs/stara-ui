@@ -137,6 +137,10 @@ const userSchema: Schema<IUser> = new Schema<IUser>(
           type: Boolean,
           default: true,
         },
+        staraOnboarding: {
+          type: Schema.Types.Mixed,
+          default: undefined,
+        },
       },
       default: {},
     },

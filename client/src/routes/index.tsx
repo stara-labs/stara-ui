@@ -58,6 +58,11 @@ const loadStaraControlPlaneView = () =>
     Component: m.default,
   }));
 
+const loadStaraOnboardingView = () =>
+  import('~/components/Stara/Onboarding/StaraOnboardingView').then((m) => ({
+    Component: m.default,
+  }));
+
 const baseEl = document.querySelector('base');
 const baseHref = baseEl?.getAttribute('href') || '/';
 
@@ -196,6 +201,10 @@ export const router = createBrowserRouter(
             {
               path: 'stara',
               lazy: loadStaraControlPlaneView,
+            },
+            {
+              path: 'onboarding',
+              lazy: loadStaraOnboardingView,
             },
             {
               path: 'stara/:section',
