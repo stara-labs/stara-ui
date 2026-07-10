@@ -87,17 +87,53 @@ jest.mock('~/utils', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
 }));
 
-function getFileInput(): HTMLInputElement {
-  // The real dialog can mount content through a portal, so the input may sit outside
-  // RTL's render container while still being cleaned between tests.
-  const inputs = Array.from(
-    document.body.querySelectorAll('input[type="file"][accept=".zip,.skill,.md"]'),
-  );
-  const input = inputs.at(-1);
-  if (!(input instanceof HTMLInputElement)) {
-    throw new Error('Upload input was not rendered');
+function getUploadDropTarget(): HTMLElement {
+  // Use the visible drop target instead of the hidden file input. Full-suite runs can
+  // contain hidden file inputs from other surfaces, but the drop target owns this flow.
+  const targets = screen.getAllByRole('button', {
+    name: 'Drag and drop or click to upload',
+  });
+  const target = targets.at(-1);
+  if (!(target instanceof HTMLElement)) {
+    throw new Error('Upload drop target was not rendered');
   }
-  return input;
+  return target;
+}
+
+function dropSkillFile(file: File): void {
+  fireEvent.drop(getUploadDropTarget(), {
+    dataTransfer: {
+      files: [file],
+    },
+  });
+}
+
+function getSubmittedFormData(): FormData {
+  const submitted = mockMutate.mock.calls[0]?.[0];
+  if (!(submitted instanceof FormData)) {
+    throw new Error('Skill upload did not submit FormData');
+  }
+  return submitted;
+}
+
+function expectSubmittedFile(file: File): void {
+  const submitted = getSubmittedFormData();
+  const submittedFile = submitted.get('file');
+  if (!(submittedFile instanceof File)) {
+    throw new Error('Skill upload FormData did not include a file');
+  }
+  expect(submittedFile.name).toBe(file.name);
+  expect(submittedFile.size).toBe(file.size);
+}
+
+function makeFile(byteLength: number, name: string): File {
+  return new File(
+    [new Blob([new Uint8Array(byteLength)], { type: 'application/octet-stream' })],
+    name,
+    {
+      type: 'application/zip',
+    },
+  );
 }
 
 describe('UploadSkillDialog', () => {
@@ -134,11 +170,7 @@ describe('UploadSkillDialog', () => {
       type: 'application/zip',
     });
 
-    fireEvent.change(getFileInput(), {
-      target: {
-        files: [file],
-      },
-    });
+    dropSkillFile(file);
 
     expect(mockMutate).not.toHaveBeenCalled();
     expect(mockShowToast).toHaveBeenCalledWith({
@@ -148,40 +180,24 @@ describe('UploadSkillDialog', () => {
   });
 
   it('uploads files exactly at the configured skill import limit', () => {
-    const appendSpy = jest.spyOn(FormData.prototype, 'append');
     render(<UploadSkillDialog isOpen={true} setIsOpen={mockSetIsOpen} />);
-    const file = new File([new Uint8Array(1024 * 1024)], 'exact-limit.skill', {
-      type: 'application/zip',
-    });
+    const file = makeFile(1024 * 1024, 'exact-limit.skill');
 
-    fireEvent.change(getFileInput(), {
-      target: {
-        files: [file],
-      },
-    });
+    dropSkillFile(file);
 
     expect(mockShowToast).not.toHaveBeenCalled();
-    expect(appendSpy).toHaveBeenCalledWith('file', file, file.name);
     expect(mockMutate).toHaveBeenCalledWith(expect.any(FormData));
-    appendSpy.mockRestore();
+    expectSubmittedFile(file);
   });
 
   it('uploads files under the configured skill import limit', () => {
-    const appendSpy = jest.spyOn(FormData.prototype, 'append');
     render(<UploadSkillDialog isOpen={true} setIsOpen={mockSetIsOpen} />);
-    const file = new File([new Uint8Array(1024)], 'small.skill', {
-      type: 'application/zip',
-    });
+    const file = makeFile(1024, 'small.skill');
 
-    fireEvent.change(getFileInput(), {
-      target: {
-        files: [file],
-      },
-    });
+    dropSkillFile(file);
 
     expect(mockShowToast).not.toHaveBeenCalled();
-    expect(appendSpy).toHaveBeenCalledWith('file', file, file.name);
     expect(mockMutate).toHaveBeenCalledWith(expect.any(FormData));
-    appendSpy.mockRestore();
+    expectSubmittedFile(file);
   });
 });
