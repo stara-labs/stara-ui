@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { FileConfigInput } from 'librechat-data-provider';
 import type { ReactNode } from 'react';
 import UploadSkillDialog from '../UploadSkillDialog';
@@ -138,12 +138,21 @@ function makeFile(byteLength: number, name: string): File {
 
 describe('UploadSkillDialog', () => {
   beforeEach(() => {
+    // This spec targets a modal surface; clear body-owned portal nodes so full-suite
+    // runs cannot route events to an upload control from an earlier case.
+    cleanup();
+    document.body.innerHTML = '';
     jest.clearAllMocks();
     mockFileConfigInput = {
       skills: {
         fileSizeLimit: 1,
       },
     };
+  });
+
+  afterEach(() => {
+    cleanup();
+    document.body.innerHTML = '';
   });
 
   it('renders the configured skill import size limit', () => {
@@ -166,9 +175,7 @@ describe('UploadSkillDialog', () => {
 
   it('rejects files above the configured skill import limit before upload', () => {
     render(<UploadSkillDialog isOpen={true} setIsOpen={mockSetIsOpen} />);
-    const file = new File([new Uint8Array(1024 * 1024 + 1)], 'too-large.skill', {
-      type: 'application/zip',
-    });
+    const file = makeFile(1024 * 1024 + 1, 'too-large.skill');
 
     dropSkillFile(file);
 
