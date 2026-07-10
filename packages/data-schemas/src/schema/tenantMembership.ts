@@ -22,6 +22,12 @@ const tenantMembershipSchema: Schema<ITenantMembership> = new Schema<ITenantMemb
       type: String,
       maxlength: 128,
     },
+    roleKey: {
+      type: String,
+      enum: ['owner', 'admin', 'member', 'viewer'],
+      default: 'member',
+      index: true,
+    },
     status: {
       type: String,
       enum: ['active', 'invited', 'disabled'],
@@ -60,5 +66,6 @@ tenantMembershipSchema.index({ userId: 1, tenantId: 1 }, { unique: true });
 tenantMembershipSchema.index({ userId: 1, status: 1, isDefault: 1 });
 tenantMembershipSchema.index({ invitedEmail: 1, status: 1 });
 tenantMembershipSchema.index({ tenantId: 1, status: 1 });
+tenantMembershipSchema.index({ tenantId: 1, roleKey: 1, status: 1 });
 
 export default tenantMembershipSchema;

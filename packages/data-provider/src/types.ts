@@ -223,6 +223,7 @@ export type StaraOnboardingMode =
   | 'business_join_pending';
 
 export type StaraTenantMembershipStatus = 'active' | 'invited' | 'disabled';
+export type StaraOrgRoleKey = 'owner' | 'admin' | 'member' | 'viewer';
 
 export type TStaraOnboardingRecord = {
   completedAt?: string | Date;
@@ -244,6 +245,7 @@ export type TStaraTenantMembership = {
   id: string;
   tenantId: string;
   orgName: string;
+  roleKey?: StaraOrgRoleKey;
   roleLabel: string;
   status: StaraTenantMembershipStatus;
   isDefault: boolean;
@@ -258,10 +260,139 @@ export type TStaraTenantInvite = {
   id: string;
   tenantId: string;
   orgName: string;
+  roleKey?: StaraOrgRoleKey;
   roleLabel: string;
   invitedByName?: string;
   expiresAt?: string | Date;
   createdAt?: string | Date;
+};
+
+export type TStaraOrgSummary = {
+  tenantId: string;
+  name: string;
+  slug?: string;
+  status: 'active' | 'disabled';
+  roleKey: StaraOrgRoleKey;
+  roleLabel: string;
+  isDefault: boolean;
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
+};
+
+export type TStaraOrgMember = {
+  userId: string;
+  email?: string;
+  name: string;
+  username?: string;
+  avatar?: string;
+  tenantId: string;
+  orgName: string;
+  roleKey: StaraOrgRoleKey;
+  roleLabel: string;
+  status: StaraTenantMembershipStatus;
+  isDefault: boolean;
+  scopeIds: string[];
+  groupIds: string[];
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
+};
+
+export type TStaraOrgInvite = {
+  id: string;
+  tenantId: string;
+  email: string;
+  roleKey: StaraOrgRoleKey;
+  roleLabel: string;
+  scopeIds: string[];
+  groupIds: string[];
+  status: 'pending' | 'revoked' | 'consumed';
+  invitedByName?: string;
+  expiresAt?: string | Date;
+  createdAt?: string | Date;
+};
+
+export type TStaraOrgTeam = {
+  id: string;
+  name: string;
+  description?: string;
+  memberIds: string[];
+  source: 'local' | 'entra';
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
+};
+
+export type TStaraOrgRoleBundle = {
+  key: StaraOrgRoleKey;
+  label: string;
+  description: string;
+  canManageOrg: boolean;
+};
+
+export type TStaraScopeOption = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+export type TStaraOrganizationsContext = {
+  activeOrg: TStaraOrgSummary | null;
+  orgs: TStaraOrgSummary[];
+  members: TStaraOrgMember[];
+  invites: TStaraOrgInvite[];
+  teams: TStaraOrgTeam[];
+  roleBundles: TStaraOrgRoleBundle[];
+  scopeOptions: TStaraScopeOption[];
+  scopedAccess: {
+    tenantId: string | null;
+    scopeIds: string[];
+    groupIds: string[];
+    restrictedAreas: string[];
+  };
+  permissions: {
+    canCreateOrg: boolean;
+    canManageMembers: boolean;
+    canManageInvites: boolean;
+    canManageTeams: boolean;
+    canManageScopes: boolean;
+  };
+};
+
+export type TCreateStaraOrgRequest = {
+  name: string;
+};
+
+export type TUpdateStaraOrgMemberRequest = {
+  roleKey?: StaraOrgRoleKey;
+  status?: StaraTenantMembershipStatus;
+  scopeIds?: string[];
+  groupIds?: string[];
+};
+
+export type TCreateStaraOrgInviteRequest = {
+  email: string;
+  roleKey: StaraOrgRoleKey;
+  scopeIds?: string[];
+  groupIds?: string[];
+};
+
+export type TCreateStaraOrgInviteResponse = {
+  invite: TStaraOrgInvite;
+  delivery: {
+    sent: boolean;
+    reason?: string;
+  };
+  inviteLink?: string;
+  context: TStaraOrganizationsContext;
+};
+
+export type TAcceptStaraOrgInviteRequest = {
+  token: string;
+};
+
+export type TUpsertStaraOrgTeamRequest = {
+  name?: string;
+  description?: string;
+  memberIds?: string[];
 };
 
 export type TStaraAccessGroup = {

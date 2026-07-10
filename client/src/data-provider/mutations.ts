@@ -84,6 +84,256 @@ export const useActivateStaraTenantMutation = (
   );
 };
 
+const syncStaraOrganizationContext = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  data: t.TStaraOrganizationsContext,
+) => {
+  queryClient.setQueryData([QueryKeys.staraOrganizations], data);
+  queryClient.invalidateQueries([QueryKeys.staraOnboarding]);
+};
+
+export const useCreateStaraOrganizationMutation = (
+  options?: t.MutationOptions<t.TStaraOrganizationsContext, t.TCreateStaraOrgRequest>,
+): UseMutationResult<t.TStaraOrganizationsContext, unknown, t.TCreateStaraOrgRequest, unknown> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.createStaraOrganization],
+    (payload: t.TCreateStaraOrgRequest) => dataService.createStaraOrganization(payload),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useActivateStaraOrganizationMutation = (
+  options?: t.MutationOptions<t.TStaraOrganizationsContext, string>,
+): UseMutationResult<t.TStaraOrganizationsContext, unknown, string, unknown> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.activateStaraOrganization],
+    (tenantId: string) => dataService.activateStaraOrganization(tenantId),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useUpdateStaraOrganizationMemberMutation = (
+  options?: t.MutationOptions<
+    t.TStaraOrganizationsContext,
+    { tenantId: string; userId: string; payload: t.TUpdateStaraOrgMemberRequest }
+  >,
+): UseMutationResult<
+  t.TStaraOrganizationsContext,
+  unknown,
+  { tenantId: string; userId: string; payload: t.TUpdateStaraOrgMemberRequest },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.updateStaraOrganizationMember],
+    (variables) => dataService.updateStaraOrganizationMember(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useDisableStaraOrganizationMemberMutation = (
+  options?: t.MutationOptions<t.TStaraOrganizationsContext, { tenantId: string; userId: string }>,
+): UseMutationResult<
+  t.TStaraOrganizationsContext,
+  unknown,
+  { tenantId: string; userId: string },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.disableStaraOrganizationMember],
+    (variables) => dataService.disableStaraOrganizationMember(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useCreateStaraOrganizationInviteMutation = (
+  options?: t.MutationOptions<
+    t.TCreateStaraOrgInviteResponse,
+    { tenantId: string; payload: t.TCreateStaraOrgInviteRequest }
+  >,
+): UseMutationResult<
+  t.TCreateStaraOrgInviteResponse,
+  unknown,
+  { tenantId: string; payload: t.TCreateStaraOrgInviteRequest },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.createStaraOrganizationInvite],
+    (variables) => dataService.createStaraOrganizationInvite(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data.context);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useAcceptStaraOrganizationInviteMutation = (
+  options?: t.MutationOptions<t.TStaraOrganizationsContext, t.TAcceptStaraOrgInviteRequest>,
+): UseMutationResult<
+  t.TStaraOrganizationsContext,
+  unknown,
+  t.TAcceptStaraOrgInviteRequest,
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.acceptStaraOrganizationInvite],
+    (payload) => dataService.acceptStaraOrganizationInvite(payload),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useRevokeStaraOrganizationInviteMutation = (
+  options?: t.MutationOptions<t.TStaraOrganizationsContext, { tenantId: string; inviteId: string }>,
+): UseMutationResult<
+  t.TStaraOrganizationsContext,
+  unknown,
+  { tenantId: string; inviteId: string },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.revokeStaraOrganizationInvite],
+    (variables) => dataService.revokeStaraOrganizationInvite(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useCreateStaraOrganizationTeamMutation = (
+  options?: t.MutationOptions<
+    t.TStaraOrganizationsContext,
+    { tenantId: string; payload: t.TUpsertStaraOrgTeamRequest }
+  >,
+): UseMutationResult<
+  t.TStaraOrganizationsContext,
+  unknown,
+  { tenantId: string; payload: t.TUpsertStaraOrgTeamRequest },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.createStaraOrganizationTeam],
+    (variables) => dataService.createStaraOrganizationTeam(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useUpdateStaraOrganizationTeamMutation = (
+  options?: t.MutationOptions<
+    t.TStaraOrganizationsContext,
+    { tenantId: string; teamId: string; payload: t.TUpsertStaraOrgTeamRequest }
+  >,
+): UseMutationResult<
+  t.TStaraOrganizationsContext,
+  unknown,
+  { tenantId: string; teamId: string; payload: t.TUpsertStaraOrgTeamRequest },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.updateStaraOrganizationTeam],
+    (variables) => dataService.updateStaraOrganizationTeam(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useDeleteStaraOrganizationTeamMutation = (
+  options?: t.MutationOptions<t.TStaraOrganizationsContext, { tenantId: string; teamId: string }>,
+): UseMutationResult<
+  t.TStaraOrganizationsContext,
+  unknown,
+  { tenantId: string; teamId: string },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+
+  return useMutation(
+    [MutationKeys.deleteStaraOrganizationTeam],
+    (variables) => dataService.deleteStaraOrganizationTeam(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        syncStaraOrganizationContext(queryClient, data);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
 export const useUpdateConversationMutation = (
   id: string,
 ): UseMutationResult<

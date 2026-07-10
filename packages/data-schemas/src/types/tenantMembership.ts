@@ -2,6 +2,7 @@ import type { Document, Types } from 'mongoose';
 
 export type TenantMembershipStatus = 'active' | 'invited' | 'disabled';
 export type TenantMembershipSource = 'stara' | 'legacy' | 'invite';
+export type TenantMembershipRoleKey = 'owner' | 'admin' | 'member' | 'viewer';
 
 export interface ITenantMembership extends Document {
   _id: Types.ObjectId;
@@ -9,6 +10,7 @@ export interface ITenantMembership extends Document {
   tenantId: string;
   orgName?: string;
   roleLabel?: string;
+  roleKey?: TenantMembershipRoleKey;
   status: TenantMembershipStatus;
   isDefault?: boolean;
   invitedEmail?: string;
@@ -24,6 +26,7 @@ export interface TenantMembershipCreateData {
   tenantId: string;
   orgName?: string;
   roleLabel?: string;
+  roleKey?: TenantMembershipRoleKey;
   status?: TenantMembershipStatus;
   isDefault?: boolean;
   invitedEmail?: string;
@@ -37,6 +40,7 @@ export interface TenantMembershipQuery {
   userId?: Types.ObjectId | string;
   tenantId?: string;
   status?: TenantMembershipStatus | TenantMembershipStatus[];
+  roleKey?: TenantMembershipRoleKey | TenantMembershipRoleKey[];
   invitedEmail?: string;
   isDefault?: boolean;
 }
@@ -44,6 +48,7 @@ export interface TenantMembershipQuery {
 export interface TenantMembershipUpdateData {
   orgName?: string;
   roleLabel?: string;
+  roleKey?: TenantMembershipRoleKey;
   status?: TenantMembershipStatus;
   isDefault?: boolean;
   invitedEmail?: string;

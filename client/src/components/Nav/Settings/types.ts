@@ -1,6 +1,6 @@
 import { createElement } from 'react';
-import { MessageSquare, Info } from 'lucide-react';
 import { SettingsTabValues } from 'librechat-data-provider';
+import { MessageSquare, Info, Building2 } from 'lucide-react';
 import { GearIcon, DataIcon, UserIcon, SpeechIcon } from '@librechat/client';
 import type { ComponentType, ReactNode } from 'react';
 import type { TranslationKeys } from '~/hooks';
@@ -10,6 +10,7 @@ export type SettingsTab =
   | SettingsTabValues.CHAT
   | SettingsTabValues.SPEECH
   | SettingsTabValues.DATA
+  | SettingsTabValues.ORGANIZATIONS
   | SettingsTabValues.ACCOUNT
   | SettingsTabValues.ABOUT;
 
@@ -25,6 +26,7 @@ export type SectionId =
   | 'stt'
   | 'tts'
   | 'memory'
+  | 'organizations'
   | 'data'
   | 'apiKeys'
   | 'danger'
@@ -114,6 +116,12 @@ export const TABS: TabMeta[] = [
       { id: 'apiKeys', labelKey: 'com_ui_settings_section_api_keys' },
       { id: 'danger', labelKey: 'com_ui_settings_section_danger_zone', danger: true },
     ],
+  },
+  {
+    id: SettingsTabValues.ORGANIZATIONS,
+    labelKey: 'com_ui_settings_tab_organizations',
+    icon: createElement(Building2, { className: 'icon-sm', 'aria-hidden': true }),
+    sections: [{ id: 'organizations', labelKey: 'com_ui_settings_section_organizations' }],
   },
   {
     id: SettingsTabValues.ACCOUNT,

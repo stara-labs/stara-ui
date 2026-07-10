@@ -48,6 +48,21 @@ export const useStaraOnboardingContextQuery = (
   );
 };
 
+export const useStaraOrganizationsContextQuery = (
+  config?: UseQueryOptions<t.TStaraOrganizationsContext>,
+): QueryObserverResult<t.TStaraOrganizationsContext> => {
+  return useQuery<t.TStaraOrganizationsContext>(
+    [QueryKeys.staraOrganizations],
+    () => dataService.getStaraOrganizationsContext(),
+    {
+      staleTime: 1000 * 30,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+      ...config,
+    },
+  );
+};
+
 export const useGetPresetsQuery = (
   config?: UseQueryOptions<TPreset[]>,
 ): QueryObserverResult<TPreset[], unknown> => {
