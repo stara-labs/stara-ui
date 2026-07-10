@@ -20,6 +20,7 @@ import type { LucideIcon } from 'lucide-react';
 
 export type StaraSectionId =
   | 'memory'
+  | 'organization'
   | 'vault'
   | 'objects'
   | 'tools'
@@ -51,6 +52,14 @@ export const staraSections: StaraSection[] = [
     icon: Brain,
     metric: '128 nodes',
     status: 'Reviewing',
+  },
+  {
+    id: 'organization',
+    label: 'Organization',
+    description: 'Org chart, team membership, and team-to-agent assignments.',
+    icon: Network,
+    metric: 'Live org',
+    status: 'Operational',
   },
   {
     id: 'vault',
