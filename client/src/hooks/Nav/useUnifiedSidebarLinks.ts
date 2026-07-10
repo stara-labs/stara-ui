@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
-import { MessagesSquare } from 'lucide-react';
+import { MessagesSquare, Network } from 'lucide-react';
 import { useUserKeyQuery } from 'librechat-data-provider/react-query';
 import { getConfigDefaults, getEndpointField } from 'librechat-data-provider';
 import type { TEndpointsConfig } from 'librechat-data-provider';
 import type { NavLink } from '~/common';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
+import StaraPanel from '~/components/Stara/StaraPanel';
 import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import useSideNavLinks from '~/hooks/Nav/useSideNavLinks';
 import store from '~/store';
@@ -57,8 +58,15 @@ export default function useUnifiedSidebarLinks() {
       id: 'conversations',
       Component: ConversationsSection,
     };
+    const staraLink: NavLink = {
+      title: 'com_stara_control_plane',
+      label: '',
+      icon: Network,
+      id: 'stara',
+      Component: StaraPanel,
+    };
 
-    return [conversationLink, ...sideNavLinks];
+    return [conversationLink, staraLink, ...sideNavLinks];
   }, [sideNavLinks]);
 
   return links;

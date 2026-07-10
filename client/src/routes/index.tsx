@@ -51,6 +51,11 @@ const loadProjectWorkspace = () =>
     Component: m.ProjectWorkspace,
   }));
 
+const loadStaraControlPlaneView = () =>
+  import('~/components/Stara/StaraControlPlaneView').then((m) => ({
+    Component: m.default,
+  }));
+
 const baseEl = document.querySelector('base');
 const baseHref = baseEl?.getAttribute('href') || '/';
 
@@ -185,6 +190,14 @@ export const router = createBrowserRouter(
                   <AgentMarketplace />
                 </MarketplaceProvider>
               ),
+            },
+            {
+              path: 'stara',
+              lazy: loadStaraControlPlaneView,
+            },
+            {
+              path: 'stara/:section',
+              lazy: loadStaraControlPlaneView,
             },
           ],
         },

@@ -67,4 +67,11 @@ describe('skills routes', () => {
 
     expect(paths).toContain('skills/new');
   });
+
+  it('registers Stara control plane routes', () => {
+    const paths = flattenPaths((router as unknown as { routes: RouteNode[] }).routes);
+
+    expect(paths).toContain('stara');
+    expect(paths).toContain('stara/:section');
+  });
 });
