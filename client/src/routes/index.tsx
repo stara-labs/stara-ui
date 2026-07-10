@@ -51,6 +51,8 @@ const loadProjectWorkspace = () =>
     Component: m.ProjectWorkspace,
   }));
 
+// Keep the control-plane bundle lazy so the chat shell can boot without loading
+// every seeded Stara surface up front.
 const loadStaraControlPlaneView = () =>
   import('~/components/Stara/StaraControlPlaneView').then((m) => ({
     Component: m.default,

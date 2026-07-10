@@ -40,6 +40,9 @@ export type StaraSection = {
   status: string;
 };
 
+// Phase 4 keeps these rows local and deterministic so the shell can be reviewed
+// before the backing Stara services exist. Later phases should replace the data
+// source through typed adapters while preserving these section contracts.
 export const staraSections: StaraSection[] = [
   {
     id: 'memory',
@@ -165,6 +168,8 @@ export const memoryCandidateMetricLabels = {
   impact: 'Impact',
 };
 
+// Stable coordinates make the Obsidian-style source graph reviewable in PR
+// screenshots. Phase 7 can swap this fixture for a live force-directed layout.
 export const graphNodes = [
   { id: 'chat', label: 'Chat capture', x: 62, y: 72, kind: 'Source' },
   { id: 'drive', label: 'Drive sync', x: 170, y: 44, kind: 'Source' },

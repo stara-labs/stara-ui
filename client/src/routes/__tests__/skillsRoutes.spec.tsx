@@ -54,6 +54,8 @@ type RouteNode = {
   children?: RouteNode[];
 };
 
+// The route table is easier to validate directly than by rendering the full app
+// shell, which would pull in auth, startup, and dashboard side effects.
 function flattenPaths(routes: RouteNode[]): string[] {
   return routes.flatMap((route) => [
     ...(route.path ? [route.path] : []),
