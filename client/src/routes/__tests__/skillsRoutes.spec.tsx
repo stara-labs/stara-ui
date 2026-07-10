@@ -54,6 +54,8 @@ type RouteNode = {
   children?: RouteNode[];
 };
 
+// The route table is easier to validate directly than by rendering the full app
+// shell, which would pull in auth, startup, and dashboard side effects.
 function flattenPaths(routes: RouteNode[]): string[] {
   return routes.flatMap((route) => [
     ...(route.path ? [route.path] : []),
@@ -66,5 +68,12 @@ describe('skills routes', () => {
     const paths = flattenPaths((router as unknown as { routes: RouteNode[] }).routes);
 
     expect(paths).toContain('skills/new');
+  });
+
+  it('registers Stara control plane routes', () => {
+    const paths = flattenPaths((router as unknown as { routes: RouteNode[] }).routes);
+
+    expect(paths).toContain('stara');
+    expect(paths).toContain('stara/:section');
   });
 });

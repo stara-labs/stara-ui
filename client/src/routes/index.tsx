@@ -12,11 +12,11 @@ import { MarketplaceProvider } from '~/components/Agents/MarketplaceContext';
 import AgentMarketplace from '~/components/Agents/Marketplace';
 import { OAuthSuccess, OAuthError } from '~/components/OAuth';
 import { AuthContextProvider } from '~/hooks/AuthContext';
-import WithRum from '~/lib/rum/WithRum';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import StartupLayout from './Layouts/Startup';
 import LoginLayout from './Layouts/Login';
 import dashboardRoutes from './Dashboard';
+import WithRum from '~/lib/rum/WithRum';
 import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
 import Search from './Search';
@@ -49,6 +49,13 @@ const loadProjectsView = () =>
 const loadProjectWorkspace = () =>
   import('~/components/Projects').then((m) => ({
     Component: m.ProjectWorkspace,
+  }));
+
+// Keep the control-plane bundle lazy so the chat shell can boot without loading
+// every seeded Stara surface up front.
+const loadStaraControlPlaneView = () =>
+  import('~/components/Stara/StaraControlPlaneView').then((m) => ({
+    Component: m.default,
   }));
 
 const baseEl = document.querySelector('base');
@@ -185,6 +192,14 @@ export const router = createBrowserRouter(
                   <AgentMarketplace />
                 </MarketplaceProvider>
               ),
+            },
+            {
+              path: 'stara',
+              lazy: loadStaraControlPlaneView,
+            },
+            {
+              path: 'stara/:section',
+              lazy: loadStaraControlPlaneView,
             },
           ],
         },

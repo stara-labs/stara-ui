@@ -1,34 +1,36 @@
 const mockVerify = jest.fn();
 const mockGetUserById = jest.fn();
 const mockFindSession = jest.fn();
-const mockRunAsSystem = jest.fn((fn) => fn());
 
 jest.mock('jsonwebtoken', () => ({ verify: (...args) => mockVerify(...args) }));
 jest.mock('@librechat/api', () => ({ isEnabled: (v) => v === 'true' || v === true }), {
   virtual: true,
 });
-jest.mock(
-  '@librechat/data-schemas',
-  () => ({
-    logger: { warn: jest.fn(), error: jest.fn() },
-    runAsSystem: (...args) => mockRunAsSystem(...args),
-  }),
-  { virtual: true },
-);
-jest.mock('librechat-data-provider', () => ({ SystemRoles: { USER: 'USER' } }), {
-  virtual: true,
-});
+jest.mock('@librechat/data-schemas', () => ({
+  ...jest.requireActual('@librechat/data-schemas'),
+  logger: { warn: jest.fn(), error: jest.fn() },
+}));
 jest.mock('~/models', () => ({
   getUserById: (...args) => mockGetUserById(...args),
   findSession: (...args) => mockFindSession(...args),
 }));
 
 const optionalShareFileAuth = require('./optionalShareFileAuth');
+const { getTenantId, SYSTEM_TENANT_ID } = require('@librechat/data-schemas');
 
 const run = async (req) => {
   const next = jest.fn();
   await optionalShareFileAuth(req, {}, next);
   return next;
+};
+
+const captureSystemContext = (mockFn, value) => {
+  const tenantIds = [];
+  mockFn.mockImplementation(async () => {
+    tenantIds.push(getTenantId());
+    return value;
+  });
+  return tenantIds;
 };
 
 describe('optionalShareFileAuth', () => {
@@ -48,14 +50,17 @@ describe('optionalShareFileAuth', () => {
 
   it('resolves the viewer from a valid refreshToken cookie with a live session', async () => {
     mockVerify.mockReturnValue({ id: 'viewer-1' });
-    mockFindSession.mockResolvedValue({ _id: 'session-1' });
-    mockGetUserById.mockResolvedValue({ _id: 'viewer-1', role: 'USER' });
+    // These model reads must run in system context because shared-file requests
+    // arrive before the share tenant is known.
+    const sessionTenantIds = captureSystemContext(mockFindSession, { _id: 'session-1' });
+    const userTenantIds = captureSystemContext(mockGetUserById, { _id: 'viewer-1', role: 'USER' });
     const req = { headers: { cookie: 'refreshToken=good.jwt' } };
     const next = await run(req);
     expect(next).toHaveBeenCalledTimes(1);
     expect(mockVerify).toHaveBeenCalledWith('good.jwt', 'test-secret');
     expect(mockFindSession).toHaveBeenCalledWith({ userId: 'viewer-1', refreshToken: 'good.jwt' });
-    expect(mockRunAsSystem).toHaveBeenCalledTimes(2);
+    expect(sessionTenantIds).toEqual([SYSTEM_TENANT_ID]);
+    expect(userTenantIds).toEqual([SYSTEM_TENANT_ID]);
     expect(req.user).toMatchObject({ id: 'viewer-1', role: 'USER' });
   });
 
@@ -78,7 +83,7 @@ describe('optionalShareFileAuth', () => {
 
   it('leaves req.user unset when the refresh token has no live session', async () => {
     mockVerify.mockReturnValue({ id: 'viewer-3' });
-    mockFindSession.mockResolvedValue(null);
+    const sessionTenantIds = captureSystemContext(mockFindSession, null);
     const req = { headers: { cookie: 'refreshToken=revoked.jwt' } };
     const next = await run(req);
     expect(next).toHaveBeenCalledTimes(1);
@@ -87,7 +92,7 @@ describe('optionalShareFileAuth', () => {
       userId: 'viewer-3',
       refreshToken: 'revoked.jwt',
     });
-    expect(mockRunAsSystem).toHaveBeenCalledTimes(1);
+    expect(sessionTenantIds).toEqual([SYSTEM_TENANT_ID]);
     expect(mockGetUserById).not.toHaveBeenCalled();
   });
 

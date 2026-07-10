@@ -21,6 +21,10 @@ function formatMegabytes(bytes: number): string {
   return Number.isInteger(value) ? `${value}` : value.toFixed(1);
 }
 
+export function isSkillFileOverSizeLimit(fileSize: number, sizeLimit: number): boolean {
+  return fileSize > sizeLimit;
+}
+
 export default function UploadSkillDialog({ isOpen, setIsOpen }: UploadSkillDialogProps) {
   const localize = useLocalize();
   const navigate = useNavigate();
@@ -63,7 +67,7 @@ export default function UploadSkillDialog({ isOpen, setIsOpen }: UploadSkillDial
       if (importMutation.isLoading) {
         return;
       }
-      if (file.size > skillImportSizeLimit) {
+      if (isSkillFileOverSizeLimit(file.size, skillImportSizeLimit)) {
         showToast({
           status: 'error',
           message: localize('com_ui_skill_upload_size_error', { 0: displayedSizeLimit }),
