@@ -1,10 +1,7 @@
 import { useMemo } from 'react';
-import type { ReactNode } from 'react';
-import { NavLink as RouterNavLink, Navigate, useParams } from 'react-router-dom';
 import { useMediaQuery } from '@librechat/client';
-import OpenSidebar from '~/components/Chat/Menus/OpenSidebar';
-import { useDocumentTitle } from '~/hooks';
-import { cn } from '~/utils';
+import { NavLink as RouterNavLink, Navigate, useParams } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import {
   graphLinks,
   graphNodes,
@@ -19,6 +16,9 @@ import {
   toolRows,
   type StaraSectionId,
 } from './staraControlPlaneData';
+import OpenSidebar from '~/components/Chat/Menus/OpenSidebar';
+import { useDocumentTitle } from '~/hooks';
+import { cn } from '~/utils';
 
 export default function StaraControlPlaneView() {
   const { section } = useParams();

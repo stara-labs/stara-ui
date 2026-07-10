@@ -6,9 +6,9 @@ import { getConfigDefaults, getEndpointField } from 'librechat-data-provider';
 import type { TEndpointsConfig } from 'librechat-data-provider';
 import type { NavLink } from '~/common';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
-import StaraPanel from '~/components/Stara/StaraPanel';
 import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import useSideNavLinks from '~/hooks/Nav/useSideNavLinks';
+import StaraPanel from '~/components/Stara/StaraPanel';
 import store from '~/store';
 
 const defaultInterface = getConfigDefaults().interface;
