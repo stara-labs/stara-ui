@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+[ -n "${CI:-}" ] && exit 0
+
+node scripts/stara-precommit-ci.mjs --push

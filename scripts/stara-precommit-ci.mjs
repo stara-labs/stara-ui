@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 
 const sourcePattern = /^(api|client|packages)\/.*\.(js|jsx|ts|tsx)$/;
 const frontendPattern = /^(client|packages\/client|packages\/data-provider)\//;
+const mode = process.argv.includes('--push') ? 'pre-push' : 'pre-commit';
 
 function run(command, args) {
   const result = spawnSync(commandForPlatform(command), args, {
@@ -33,30 +34,59 @@ function commandForPlatform(command) {
 }
 
 function stagedFiles() {
-  const result = spawnSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMRTUXB'], {
+  const result = gitOutput(['diff', '--cached', '--name-only', '--diff-filter=ACMRTUXB']);
+
+  return normalizeFiles(result.stdout);
+}
+
+function pushedFiles() {
+  const base =
+    gitOutput(['merge-base', 'HEAD', '@{upstream}'], { allowFailure: true }).stdout.trim() ||
+    gitOutput(['merge-base', 'HEAD', 'origin/main'], { allowFailure: true }).stdout.trim() ||
+    gitOutput(['rev-parse', 'HEAD~1'], { allowFailure: true }).stdout.trim();
+
+  if (!base) {
+    return [];
+  }
+
+  const result = gitOutput(['diff', '--name-only', '--diff-filter=ACMRTUXB', `${base}...HEAD`]);
+
+  return normalizeFiles(result.stdout);
+}
+
+function gitOutput(args, options = {}) {
+  const result = spawnSync('git', args, {
     encoding: 'utf8',
   });
 
-  if (result.status !== 0) {
+  if (result.status !== 0 && !options.allowFailure) {
     process.stderr.write(result.stderr ?? '');
     process.exit(result.status ?? 1);
   }
 
-  return result.stdout
+  return {
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+    status: result.status,
+  };
+}
+
+function normalizeFiles(output) {
+  return output
     .split(/\r?\n/)
     .map((file) => file.trim().replaceAll('\\', '/'))
     .filter(Boolean);
 }
 
-const files = stagedFiles();
+const files = mode === 'pre-push' ? pushedFiles() : stagedFiles();
 const sourceFiles = files.filter((file) => sourcePattern.test(file));
 
 if (sourceFiles.length === 0) {
-  console.log('Stara pre-commit CI: no staged source files to check.');
+  console.log(`Stara ${mode} CI: no source files to check.`);
   process.exit(0);
 }
 
-console.log('Stara pre-commit CI: checking staged source files:');
+console.log(`Stara ${mode} CI: checking source files:`);
 for (const file of sourceFiles) {
   console.log(`- ${file}`);
 }
