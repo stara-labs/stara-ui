@@ -6,13 +6,16 @@ import {
   graphLinks,
   graphNodes,
   heartbeatRows,
+  launcherRows,
   memoryCandidates,
   memoryCandidateMetricLabels,
   policyEnvelopeRows,
+  resolveStaraSectionId,
   routeRows,
   settingsRows,
   staraSectionIds,
   staraSections,
+  traceRows,
   toolRows,
   type StaraSectionId,
 } from './staraControlPlaneData';
@@ -24,16 +27,24 @@ import { cn } from '~/utils';
 export default function StaraControlPlaneView() {
   const { section } = useParams();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
-  const activeSection = useMemo(() => staraSections.find((item) => item.id === section), [section]);
+  const resolvedSectionId = useMemo(() => resolveStaraSectionId(section), [section]);
+  const activeSection = useMemo(
+    () => staraSections.find((item) => item.id === resolvedSectionId),
+    [resolvedSectionId],
+  );
 
   useDocumentTitle('Stara Control Plane | Stara');
 
   if (!section) {
-    return <Navigate to="/stara/memory" replace />;
+    return <Navigate to="/stara/launcher" replace />;
   }
 
-  if (!staraSectionIds.includes(section as StaraSectionId) || !activeSection) {
-    return <Navigate to="/stara/memory" replace />;
+  if (!resolvedSectionId || !staraSectionIds.includes(resolvedSectionId) || !activeSection) {
+    return <Navigate to="/stara/launcher" replace />;
+  }
+
+  if (resolvedSectionId !== section) {
+    return <Navigate to={`/stara/${resolvedSectionId}`} replace />;
   }
 
   const Icon = activeSection.icon;
@@ -102,7 +113,10 @@ export default function StaraControlPlaneView() {
 }
 
 function SectionContent({ sectionId }: { sectionId: StaraSectionId }) {
-  if (sectionId === 'memory') {
+  if (sectionId === 'launcher') {
+    return <LauncherSection />;
+  }
+  if (sectionId === 'context') {
     return <MemorySection />;
   }
   if (sectionId === 'organization') {
@@ -114,8 +128,11 @@ function SectionContent({ sectionId }: { sectionId: StaraSectionId }) {
   if (sectionId === 'heartbeat') {
     return <HeartbeatSection />;
   }
-  if (sectionId === 'routes') {
+  if (sectionId === 'route-summary') {
     return <RoutesSection />;
+  }
+  if (sectionId === 'trace-summary') {
+    return <TraceSummarySection />;
   }
   if (sectionId === 'settings') {
     return <SettingsSection />;
@@ -124,6 +141,22 @@ function SectionContent({ sectionId }: { sectionId: StaraSectionId }) {
     return <ApprovalsSection />;
   }
   return <GenericSection sectionId={sectionId} />;
+}
+
+function LauncherSection() {
+  return (
+    <Panel title="Control Plane Launcher" eyebrow="Operational entry points">
+      <DataTable
+        columns={['Surface', 'Path', 'Default', 'State']}
+        rows={launcherRows}
+        getStatusClass={(value) =>
+          value === 'Ready' || value === 'Visible' || value === 'Live'
+            ? 'bg-surface-active-alt text-text-primary'
+            : 'bg-surface-secondary text-text-secondary'
+        }
+      />
+    </Panel>
+  );
 }
 
 function MemorySection() {
@@ -253,8 +286,16 @@ function HeartbeatSection() {
 
 function RoutesSection() {
   return (
-    <Panel title="Route And Cost Summary" eyebrow="Policy-routed model movement">
+    <Panel title="Route Summary" eyebrow="Policy-routed model movement">
       <DataTable columns={['Route', 'Share', 'Cost', 'Reason']} rows={routeRows} />
+    </Panel>
+  );
+}
+
+function TraceSummarySection() {
+  return (
+    <Panel title="Trace Summary" eyebrow="Redacted observability">
+      <DataTable columns={['Trace', 'Source', 'Decision', 'State']} rows={traceRows} />
     </Panel>
   );
 }

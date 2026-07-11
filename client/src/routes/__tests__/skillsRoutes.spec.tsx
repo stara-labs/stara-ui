@@ -75,5 +75,12 @@ describe('skills routes', () => {
 
     expect(paths).toContain('stara');
     expect(paths).toContain('stara/:section');
+    expect(paths).toContain('stara/launcher');
+    expect(paths).toContain('stara/vault');
+    expect(paths).toContain('stara/context');
+    expect(paths).toContain('stara/approvals');
+    expect(paths).toContain('stara/heartbeat');
+    expect(paths).toContain('stara/route-summary');
+    expect(paths).toContain('stara/trace-summary');
   });
 });
