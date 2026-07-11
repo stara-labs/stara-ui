@@ -4,13 +4,14 @@ const { createAppConfigService, clearMcpConfigCache } = require('@librechat/api'
 const { setCachedTools, invalidateCachedTools } = require('./getCachedTools');
 const { loadAndFormatTools } = require('~/server/services/start/tools');
 const loadCustomConfig = require('./loadCustomConfig');
+const { applyStaraControlPlaneDefaults } = require('./staraDefaults');
 const getLogStores = require('~/cache/getLogStores');
 const paths = require('~/config/paths');
 const db = require('~/models');
 
 const loadBaseConfig = async () => {
   /** @type {TCustomConfig} */
-  const config = (await loadCustomConfig()) ?? {};
+  const config = applyStaraControlPlaneDefaults((await loadCustomConfig()) ?? {});
   /** @type {Record<string, FunctionTool>} */
   const systemTools = loadAndFormatTools({
     adminFilter: config.filteredTools,

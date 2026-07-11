@@ -19,7 +19,8 @@ import {
 import type { LucideIcon } from 'lucide-react';
 
 export type StaraSectionId =
-  | 'memory'
+  | 'launcher'
+  | 'context'
   | 'organization'
   | 'vault'
   | 'objects'
@@ -28,8 +29,8 @@ export type StaraSectionId =
   | 'recipes'
   | 'heartbeat'
   | 'approvals'
-  | 'routes'
-  | 'observability'
+  | 'route-summary'
+  | 'trace-summary'
   | 'settings';
 
 export type StaraSection = {
@@ -41,13 +42,18 @@ export type StaraSection = {
   status: string;
 };
 
-// Phase 4 keeps these rows local and deterministic so the shell can be reviewed
-// before the backing Stara services exist. Later phases should replace the data
-// source through typed adapters while preserving these section contracts.
 export const staraSections: StaraSection[] = [
   {
-    id: 'memory',
-    label: 'Memory',
+    id: 'launcher',
+    label: 'Launcher',
+    description: 'Control-plane entry points for chat, MCP tools, approvals, and traces.',
+    icon: Sparkles,
+    metric: '4 paths',
+    status: 'Ready',
+  },
+  {
+    id: 'context',
+    label: 'Vault / Context',
     description: 'User, team, and company knowledge with reviewable provenance.',
     icon: Brain,
     metric: '128 nodes',
@@ -118,16 +124,16 @@ export const staraSections: StaraSection[] = [
     status: 'Queued',
   },
   {
-    id: 'routes',
-    label: 'Routes',
+    id: 'route-summary',
+    label: 'Route Summary',
     description: 'Policy-approved model routes, costs, confidence, and fallbacks.',
     icon: Route,
     metric: '$18.42',
     status: 'Tracing',
   },
   {
-    id: 'observability',
-    label: 'Observability',
+    id: 'trace-summary',
+    label: 'Trace Summary',
     description: 'Redacted traces, quality signals, confidence, and feedback.',
     icon: GitBranch,
     metric: '92 traces',
@@ -144,6 +150,22 @@ export const staraSections: StaraSection[] = [
 ];
 
 export const staraSectionIds = staraSections.map((section) => section.id);
+
+export const staraSectionAliases: Partial<Record<string, StaraSectionId>> = {
+  memory: 'context',
+  observability: 'trace-summary',
+  routes: 'route-summary',
+};
+
+export function resolveStaraSectionId(section?: string): StaraSectionId | undefined {
+  if (!section) {
+    return undefined;
+  }
+  if (staraSectionIds.includes(section as StaraSectionId)) {
+    return section as StaraSectionId;
+  }
+  return staraSectionAliases[section];
+}
 
 export const memoryCandidates = [
   {
@@ -197,11 +219,20 @@ export const graphLinks = [
   ['tool', 'route'],
 ] as const;
 
+export const launcherRows = [
+  ['Stara Gateway', 'Default custom endpoint', 'stara-frontier-mock', 'Ready'],
+  ['Stara MCP', 'Tool server', 'stara-control-plane', 'Visible'],
+  ['Approvals', 'Human review queue', 'Memory and route packets', 'Queued'],
+  ['Trace Summary', 'Redacted observation view', 'Gateway/API/MCP spans', 'Live'],
+];
+
 export const toolRows = [
-  ['stara_memory_team_workflow_search', 'Memory', 'Team scope', 'Active'],
-  ['stara_context_customer_policy_lookup', 'Context', 'Org scope', 'Generated'],
-  ['stara_recipe_draft_from_conversation', 'Recipes', 'Actor scope', 'V1 batch'],
+  ['stara_memory_recall', 'Memory', 'Actor scope', 'Active'],
+  ['stara_context_build', 'Context', 'Org scope', 'Active'],
+  ['stara_recipe_draft_from_conversation', 'Recipes', 'Actor scope', 'Pending service'],
+  ['stara_workflow_heartbeat', 'Heartbeat', 'Team scope', 'Pending service'],
   ['stara_route_cost_summary', 'Routes', 'Admin view', 'Pending service'],
+  ['stara_observability_trace_summary', 'Trace', 'Admin view', 'Pending service'],
 ];
 
 export const heartbeatRows = [
@@ -216,6 +247,12 @@ export const routeRows = [
   ['Secure inference', '27%', '$4.18', 'Sensitive context'],
   ['Approved frontier', '9%', '$14.24', 'Low sensitivity'],
   ['Review required', '2%', '$0.00', 'Policy hold'],
+];
+
+export const traceRows = [
+  ['trace_live_gateway', 'Gateway', 'frontier', 'Redacted'],
+  ['trace_live_mcp', 'MCP', 'context build', 'Redacted'],
+  ['trace_projection_rebuild', 'Projection', 'tenant_acme', 'Persisted'],
 ];
 
 export const settingsRows: Array<[string, string, LucideIcon]> = [
