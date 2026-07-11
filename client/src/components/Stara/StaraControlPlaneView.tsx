@@ -16,6 +16,7 @@ import {
   toolRows,
   type StaraSectionId,
 } from './staraControlPlaneData';
+import StaraOrganizationControl from './StaraOrganizationControl';
 import OpenSidebar from '~/components/Chat/Menus/OpenSidebar';
 import { useDocumentTitle } from '~/hooks';
 import { cn } from '~/utils';
@@ -103,6 +104,9 @@ export default function StaraControlPlaneView() {
 function SectionContent({ sectionId }: { sectionId: StaraSectionId }) {
   if (sectionId === 'memory') {
     return <MemorySection />;
+  }
+  if (sectionId === 'organization') {
+    return <StaraOrganizationControl />;
   }
   if (sectionId === 'tools') {
     return <ToolsSection />;
