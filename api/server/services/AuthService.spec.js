@@ -1,8 +1,52 @@
+const mockLogger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() };
+const mockGetTenantId = jest.fn(() => undefined);
+const mockIsEnabled = jest.fn((val) => val === 'true' || val === true);
+const mockCheckEmailConfig = jest.fn();
+const mockIsEmailDomainAllowed = jest.fn();
+const mockMath = jest.fn((val, fallback) => (val ? Number(val) : fallback));
+const mockShouldUseSecureCookie = jest.fn(() => false);
+const mockResolveAppConfigForUser = jest.fn(async (_getAppConfig, _user) => ({}));
+const mockSetCloudFrontCookies = jest.fn(() => true);
+const mockGetCloudFrontConfig = jest.fn(() => ({
+  domain: 'https://cdn.example.com',
+  imageSigning: 'cookies',
+  cookieDomain: '.example.com',
+  privateKey: 'test-private-key',
+  keyPairId: 'K123ABC',
+}));
+const mockParseCloudFrontCookieScope = jest.fn(() => null);
+const mockFindUser = jest.fn();
+const mockFindToken = jest.fn();
+const mockCreateUser = jest.fn();
+const mockUpdateUser = jest.fn();
+const mockCountUsers = jest.fn();
+const mockGetUserById = jest.fn();
+const mockFindSession = jest.fn();
+const mockCreateToken = jest.fn();
+const mockDeleteTokens = jest.fn();
+const mockDeleteSession = jest.fn();
+const mockCreateSession = jest.fn();
+const mockGenerateToken = jest.fn();
+const mockDeleteUserById = jest.fn();
+const mockGenerateRefreshToken = jest.fn();
+const mockRegisterSchemaSafeParse = jest.fn((user) => ({
+  success: true,
+  data: {
+    name: user.name,
+    username: user.username,
+    email: user.email,
+    password: user.password,
+    confirm_password: user.confirm_password,
+  },
+}));
+const mockGetAppConfig = jest.fn();
+const mockSendEmail = jest.fn();
+
 jest.mock(
   '@librechat/data-schemas',
   () => ({
-    logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() },
-    getTenantId: jest.fn(() => undefined),
+    logger: mockLogger,
+    getTenantId: mockGetTenantId,
     DEFAULT_SESSION_EXPIRY: 900000,
     DEFAULT_REFRESH_TOKEN_EXPIRY: 604800000,
   }),
@@ -20,85 +64,73 @@ jest.mock(
 jest.mock(
   '@librechat/api',
   () => ({
-    isEnabled: jest.fn((val) => val === 'true' || val === true),
-    checkEmailConfig: jest.fn(),
-    isEmailDomainAllowed: jest.fn(),
-    math: jest.fn((val, fallback) => (val ? Number(val) : fallback)),
-    shouldUseSecureCookie: jest.fn(() => false),
-    resolveAppConfigForUser: jest.fn(async (_getAppConfig, _user) => ({})),
-    setCloudFrontCookies: jest.fn(() => true),
-    getCloudFrontConfig: jest.fn(() => ({
-      domain: 'https://cdn.example.com',
-      imageSigning: 'cookies',
-      cookieDomain: '.example.com',
-      privateKey: 'test-private-key',
-      keyPairId: 'K123ABC',
-    })),
-    parseCloudFrontCookieScope: jest.fn(() => null),
+    isEnabled: mockIsEnabled,
+    checkEmailConfig: mockCheckEmailConfig,
+    isEmailDomainAllowed: mockIsEmailDomainAllowed,
+    math: mockMath,
+    shouldUseSecureCookie: mockShouldUseSecureCookie,
+    resolveAppConfigForUser: mockResolveAppConfigForUser,
+    setCloudFrontCookies: mockSetCloudFrontCookies,
+    getCloudFrontConfig: mockGetCloudFrontConfig,
+    parseCloudFrontCookieScope: mockParseCloudFrontCookieScope,
     CLOUDFRONT_SCOPE_COOKIE: 'LibreChat-CloudFront-Scope',
   }),
   { virtual: true },
 );
 jest.mock('~/models', () => ({
-  findUser: jest.fn(),
-  findToken: jest.fn(),
-  createUser: jest.fn(),
-  updateUser: jest.fn(),
-  countUsers: jest.fn(),
-  getUserById: jest.fn(),
-  findSession: jest.fn(),
-  createToken: jest.fn(),
-  deleteTokens: jest.fn(),
-  deleteSession: jest.fn(),
-  createSession: jest.fn(),
-  generateToken: jest.fn(),
-  deleteUserById: jest.fn(),
-  generateRefreshToken: jest.fn(),
+  findUser: mockFindUser,
+  findToken: mockFindToken,
+  createUser: mockCreateUser,
+  updateUser: mockUpdateUser,
+  countUsers: mockCountUsers,
+  getUserById: mockGetUserById,
+  findSession: mockFindSession,
+  createToken: mockCreateToken,
+  deleteTokens: mockDeleteTokens,
+  deleteSession: mockDeleteSession,
+  createSession: mockCreateSession,
+  generateToken: mockGenerateToken,
+  deleteUserById: mockDeleteUserById,
+  generateRefreshToken: mockGenerateRefreshToken,
 }));
 jest.mock('~/strategies/validators', () => ({
   registerSchema: {
-    safeParse: jest.fn((user) => ({
-      success: true,
-      data: {
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        password: user.password,
-        confirm_password: user.confirm_password,
-      },
-    })),
+    safeParse: mockRegisterSchemaSafeParse,
   },
 }));
-jest.mock('~/server/services/Config', () => ({ getAppConfig: jest.fn() }));
-jest.mock('~/server/utils', () => ({ sendEmail: jest.fn() }));
+jest.mock('~/server/services/Config', () => ({ getAppConfig: mockGetAppConfig }));
+jest.mock('~/server/utils', () => ({ sendEmail: mockSendEmail }));
 
-const {
-  checkEmailConfig,
-  shouldUseSecureCookie,
-  isEmailDomainAllowed,
-  resolveAppConfigForUser,
-  setCloudFrontCookies,
-  getCloudFrontConfig,
-  parseCloudFrontCookieScope,
-} = require('@librechat/api');
+jest.resetModules();
+
+const checkEmailConfig = mockCheckEmailConfig;
+const shouldUseSecureCookie = mockShouldUseSecureCookie;
+const isEmailDomainAllowed = mockIsEmailDomainAllowed;
+const resolveAppConfigForUser = mockResolveAppConfigForUser;
+const setCloudFrontCookies = mockSetCloudFrontCookies;
+const getCloudFrontConfig = mockGetCloudFrontConfig;
+const parseCloudFrontCookieScope = mockParseCloudFrontCookieScope;
 const jwt = require('jsonwebtoken');
-const { logger, getTenantId } = require('@librechat/data-schemas');
-const {
-  findUser,
-  findToken,
-  createUser,
-  updateUser,
-  countUsers,
-  getUserById,
-  generateToken,
-  generateRefreshToken,
-  createSession,
-  createToken,
-  deleteTokens,
-} = require('~/models');
-const { getAppConfig } = require('~/server/services/Config');
-const { sendEmail } = require('~/server/utils');
+const logger = mockLogger;
+const getTenantId = mockGetTenantId;
+const findUser = mockFindUser;
+const findToken = mockFindToken;
+const createUser = mockCreateUser;
+const updateUser = mockUpdateUser;
+const countUsers = mockCountUsers;
+const getUserById = mockGetUserById;
+const generateToken = mockGenerateToken;
+const generateRefreshToken = mockGenerateRefreshToken;
+const createSession = mockCreateSession;
+const createToken = mockCreateToken;
+const deleteTokens = mockDeleteTokens;
+const getAppConfig = mockGetAppConfig;
+const sendEmail = mockSendEmail;
 const bcrypt = require('bcryptjs');
+let authService;
+jest.isolateModules(() => {
+  authService = require('./AuthService');
+});
 const {
   setOpenIDAuthTokens,
   requestPasswordReset,
@@ -108,7 +140,7 @@ const {
   setAuthTokens,
   setCloudFrontAuthCookies,
   verifyEmail,
-} = require('./AuthService');
+} = authService;
 
 /** Helper to build a mock Express response */
 function mockResponse() {

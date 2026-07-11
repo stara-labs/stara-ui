@@ -466,14 +466,18 @@ describe('Multer Configuration', () => {
     });
 
     it('should handle file system errors when directory creation fails', () => {
-      // Test with a non-existent parent directory to simulate fs issues
-      const invalidPath = '/nonexistent/path/that/should/not/exist';
-      mockReq.config.paths.uploads = invalidPath;
+      const mkdirSpy = jest.spyOn(fs, 'mkdirSync').mockImplementationOnce(() => {
+        throw new Error('mkdir failed');
+      });
+      mockReq.config.paths.uploads = path.join(tempDir, 'cannot-create');
 
-      // The current implementation doesn't catch errors, so they're thrown synchronously
-      expect(() => {
-        storage.getDestination(mockReq, mockFile, jest.fn());
-      }).toThrow();
+      try {
+        expect(() => {
+          storage.getDestination(mockReq, mockFile, jest.fn());
+        }).toThrow('mkdir failed');
+      } finally {
+        mkdirSpy.mockRestore();
+      }
     });
 
     it('should handle malformed filenames with real sanitization', (done) => {
