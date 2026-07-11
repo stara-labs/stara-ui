@@ -13,8 +13,13 @@ const {
   // validateModel,
   validateConvoAccess,
   buildEndpointOption,
+  requireStaraAssurance,
   canAccessAgentFromBody,
 } = require('~/server/middleware');
+const {
+  STARA_GATEWAY_ENDPOINT_NAME,
+  STARA_GATEWAY_SPEC_NAME,
+} = require('~/server/services/Config/staraDefaults');
 const { initializeClient } = require('~/server/services/Endpoints/agents');
 const AgentController = require('~/server/controllers/agents/request');
 const ResumeController = require('~/server/controllers/agents/resume');
@@ -71,6 +76,25 @@ const restoreResumeContext = async (req, res, next) => {
   next();
 };
 
+const isStaraGatewayRequest = (req) => {
+  const endpoint = req.body?.endpoint ?? req.params?.endpoint;
+  const spec = req.body?.spec;
+  const endpointOption = req.body?.endpointOption;
+  return (
+    endpoint === STARA_GATEWAY_ENDPOINT_NAME ||
+    spec === STARA_GATEWAY_SPEC_NAME ||
+    endpointOption?.endpoint === STARA_GATEWAY_ENDPOINT_NAME ||
+    endpointOption?.spec === STARA_GATEWAY_SPEC_NAME
+  );
+};
+
+const requireStaraGatewayAssurance = (req, res, next) => {
+  if (!isStaraGatewayRequest(req)) {
+    return next();
+  }
+  return requireStaraAssurance(req, res, next);
+};
+
 router.use(restoreResumeContext);
 router.use(createMessageFilterPii({ getConfig: (req) => req.config?.messageFilter?.pii }));
 router.use(moderateText);
@@ -78,6 +102,7 @@ router.use(checkAgentAccess);
 router.use(checkAgentResourceAccess);
 router.use(validateConvoAccess);
 router.use(buildEndpointOption);
+router.use(requireStaraGatewayAssurance);
 
 const controller = async (req, res, next) => {
   await AgentController(req, res, next, initializeClient, addTitle);

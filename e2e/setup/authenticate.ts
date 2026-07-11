@@ -3,6 +3,7 @@ import type { FullConfig, Page } from '@playwright/test';
 import type { User } from '../types';
 import cleanupUser from './cleanupUser';
 import { completeStaraOnboarding, getAccessToken } from './staraOnboarding';
+import { applyRuntimeEnv } from './runtimeEnv';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -34,6 +35,29 @@ async function login(page: Page, user: User) {
   await page.getByLabel('Email').fill(user.email);
   await page.getByLabel('Password').fill(user.password);
   await page.getByTestId('login-button').click();
+}
+
+async function grantSeededUserAssurance(user: User) {
+  applyRuntimeEnv();
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { connectDb } = require('@librechat/backend/db/connect');
+  const { User } = require('@librechat/backend/db/models');
+  /* eslint-enable @typescript-eslint/no-require-imports */
+
+  const db = await connectDb();
+  try {
+    const foundUser = await User.findOne({ email: user.email.toLowerCase() }).select('_id email');
+    if (!foundUser?._id) {
+      throw new Error(`E2E user not found after registration: ${user.email}`);
+    }
+
+    await User.findByIdAndUpdate(foundUser._id, {
+      $set: { emailVerified: true, twoFactorEnabled: true },
+      $unset: { expiresAt: '' },
+    });
+  } finally {
+    await db.connection.close();
+  }
 }
 
 function appURL(baseURL: string, pathname = '') {
@@ -91,6 +115,7 @@ async function authenticate(config: FullConfig, user: User) {
     await login(page, user);
     await page.waitForURL(conversationURL, { timeout });
     const token = await getAccessToken(page);
+    await grantSeededUserAssurance(user);
     await completeStaraOnboarding(page.context().request, {
       baseURL,
       seededBy: 'e2e-authenticate',

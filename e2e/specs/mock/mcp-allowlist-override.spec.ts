@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
-import { getPrimaryE2EUser } from '../../setup/users.mock';
+import { getAccessToken, NEW_CHAT_PATH } from './helpers';
 
 /**
  * Proves the #13809 fix end to end: an admin-panel `mcpSettings.allowedDomains`
@@ -11,9 +11,8 @@ import { getPrimaryE2EUser } from '../../setup/users.mock';
  * must let the server reinitialize. Before the fix, reinspection used the frozen
  * YAML allowlist and the server stayed unreachable.
  *
- * Pure-API e2e against the real backend + DB: the JWT comes from the Authorization
- * header (`ExtractJwt.fromAuthHeaderAsBearerToken`), so we log in for a token rather
- * than relying on the browser storage state.
+ * E2E against the real backend + DB: the JWT comes from the authenticated browser
+ * session and is sent through the Authorization header.
  */
 
 const SERVER_NAME = 'e2e-http';
@@ -34,24 +33,23 @@ async function reinitialize(
 
 test.describe('MCP admin-panel allowlist override', () => {
   test('honors an admin mcpSettings.allowedDomains override so a blocked server reinitializes', async ({
+    page,
     request,
   }) => {
     test.setTimeout(120000);
 
     // The seeded primary user is the first-registered user → ADMIN, so it can write
-    // config overrides. Log in for a Bearer token + the user id.
-    const { email, password } = getPrimaryE2EUser();
-    const loginRes = await request.post('/api/auth/login', { data: { email, password } });
-    expect(loginRes.ok()).toBeTruthy();
-    const { token, user } = (await loginRes.json()) as {
-      token: string;
-      user: { id?: string; _id?: string };
-    };
+    // config overrides.
+    // Reuse the authenticated browser session because password login now enters MFA.
+    await page.goto(NEW_CHAT_PATH, { timeout: 10000 });
+    const token = await getAccessToken(page);
+    const headers = { Authorization: `Bearer ${token}` };
+    const userRes = await request.get('/api/user', { headers });
+    expect(userRes.ok()).toBeTruthy();
+    const user = (await userRes.json()) as { id?: string; _id?: string };
     const userId = user.id ?? user._id;
     expect(token).toBeTruthy();
     expect(userId).toBeTruthy();
-
-    const headers = { Authorization: `Bearer ${token}` };
 
     // Baseline: the fixture's origin is not in the YAML allowlist, so reinit fails.
     const before = await reinitialize(request, headers);

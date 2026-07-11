@@ -14,7 +14,7 @@ const {
   acceptStaraTenantInviteController,
   activateStaraTenantController,
 } = require('~/server/controllers/StaraOnboardingController');
-const { requireJwtAuth } = require('~/server/middleware');
+const { requireJwtAuth, requireStaraAssurance } = require('~/server/middleware');
 const { getToolFavorites, addToolFavorite, removeToolFavorite } = require('~/models');
 
 const router = express.Router();
@@ -41,11 +41,13 @@ router.put('/onboarding/stara', requireJwtAuth, saveStaraOnboardingController);
 router.post(
   '/onboarding/stara/invites/:inviteId/accept',
   requireJwtAuth,
+  requireStaraAssurance,
   acceptStaraTenantInviteController,
 );
 router.post(
   '/onboarding/stara/tenants/:tenantId/activate',
   requireJwtAuth,
+  requireStaraAssurance,
   activateStaraTenantController,
 );
 

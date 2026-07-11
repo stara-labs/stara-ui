@@ -453,6 +453,10 @@ describe('setOpenIDAuthTokens', () => {
 });
 
 describe('registerUser', () => {
+  const originalStaraApiUrl = process.env.STARA_API_URL;
+  const originalStaraApiBaseUrl = process.env.STARA_API_BASE_URL;
+  const originalStaraAllowedSignupDomains = process.env.STARA_ALLOWED_SIGNUP_DOMAINS;
+  const originalStaraRequireSignupAllowlist = process.env.STARA_REQUIRE_SIGNUP_ALLOWLIST;
   const registrationPayload = {
     name: 'Test User',
     username: 'testuser',
@@ -464,6 +468,10 @@ describe('registerUser', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.ALLOW_UNVERIFIED_EMAIL_LOGIN = 'false';
+    delete process.env.STARA_API_URL;
+    delete process.env.STARA_API_BASE_URL;
+    delete process.env.STARA_ALLOWED_SIGNUP_DOMAINS;
+    delete process.env.STARA_REQUIRE_SIGNUP_ALLOWLIST;
     checkEmailConfig.mockReturnValue(false);
     isEmailDomainAllowed.mockReturnValue(true);
     getAppConfig.mockResolvedValue({
@@ -502,6 +510,57 @@ describe('registerUser', () => {
         provider: 'google',
       }),
     );
+  });
+
+  it('blocks direct Stara GA signup when the email domain is not allowlisted', async () => {
+    process.env.STARA_API_URL = 'http://stara-api:3081';
+    process.env.STARA_ALLOWED_SIGNUP_DOMAINS = 'allowed.example';
+
+    const result = await registerUser(registrationPayload);
+
+    expect(result.status).toBe(403);
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
+  it('allows direct Stara GA signup when the email domain is allowlisted', async () => {
+    process.env.STARA_API_URL = 'http://stara-api:3081';
+    process.env.STARA_ALLOWED_SIGNUP_DOMAINS = 'example.com,allowed.example';
+
+    const result = await registerUser(registrationPayload);
+
+    expect(result.status).toBe(200);
+    expect(createUser).toHaveBeenCalledWith(
+      expect.objectContaining({ email: registrationPayload.email }),
+      expect.any(Object),
+      false,
+      true,
+    );
+  });
+
+  it('allows validated invite signup even when direct self-service would be blocked', async () => {
+    process.env.STARA_API_URL = 'http://stara-api:3081';
+    process.env.STARA_ALLOWED_SIGNUP_DOMAINS = 'allowed.example';
+
+    const result = await registerUser(
+      { ...registrationPayload, email: 'invitee@external.example' },
+      {},
+      { allowInviteSignup: true },
+    );
+
+    expect(result.status).toBe(200);
+    expect(createUser).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'invitee@external.example' }),
+      expect.any(Object),
+      false,
+      true,
+    );
+  });
+
+  afterAll(() => {
+    restoreEnv('STARA_API_URL', originalStaraApiUrl);
+    restoreEnv('STARA_API_BASE_URL', originalStaraApiBaseUrl);
+    restoreEnv('STARA_ALLOWED_SIGNUP_DOMAINS', originalStaraAllowedSignupDomains);
+    restoreEnv('STARA_REQUIRE_SIGNUP_ALLOWLIST', originalStaraRequireSignupAllowlist);
   });
 });
 
@@ -970,6 +1029,14 @@ describe('resendVerificationEmail', () => {
     );
   });
 });
+
+function restoreEnv(key, value) {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = value;
+}
 
 describe('CloudFront cookie integration', () => {
   const cloudFrontCookieConfig = {

@@ -13,6 +13,7 @@ const abortMiddleware = require('./abortMiddleware');
 const checkInviteUser = require('./checkInviteUser');
 const requireJwtAuth = require('./requireJwtAuth');
 const { requireRumProxyAuth } = require('./requireJwtAuth');
+const requireStaraAssurance = require('./requireStaraAssurance');
 const configMiddleware = require('./config/app');
 const validateModel = require('./validateModel');
 const moderateText = require('./moderateText');
@@ -40,6 +41,7 @@ module.exports = {
   validateModel,
   requireJwtAuth,
   requireRumProxyAuth,
+  requireStaraAssurance,
   setTwoFactorTempUser,
   checkInviteUser,
   requireLdapAuth,

@@ -51,10 +51,13 @@ const preservedCredentialEnvKeys = new Set([
  */
 function writeRuntimeMockConfig() {
   const template = fs.readFileSync(configTemplatePath, 'utf8');
-  const config =
-    process.env.E2E_MODEL_SPECS_ENFORCE === 'true'
-      ? template.replace('\n  enforce: false\n', '\n  enforce: true\n')
-      : template;
+  let config = template.replace(
+    'http://127.0.0.1:8765/mcp',
+    `http://127.0.0.1:${MCP_HTTP_PORT}/mcp`,
+  );
+  if (process.env.E2E_MODEL_SPECS_ENFORCE === 'true') {
+    config = config.replace('\n  enforce: false\n', '\n  enforce: true\n');
+  }
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, config);
 }
