@@ -86,6 +86,12 @@ afterEach(() => {
   delete process.env.ALLOW_SOCIAL_LOGIN;
   delete process.env.ALLOW_PASSWORD_RESET;
   delete process.env.DOMAIN_SERVER;
+  delete process.env.EMAIL_SERVICE;
+  delete process.env.EMAIL_HOST;
+  delete process.env.EMAIL_FROM;
+  delete process.env.MAILGUN_API_KEY;
+  delete process.env.MAILGUN_DOMAIN;
+  delete process.env.RESEND_API_KEY;
   delete process.env.GOOGLE_CLIENT_ID;
   delete process.env.GOOGLE_CLIENT_SECRET;
   delete process.env.OPENID_CLIENT_ID;
@@ -250,6 +256,18 @@ describe('GET /api/config', () => {
       expect(response.body.appTitle).toBe('Test App');
       expect(response.body).toHaveProperty('emailLoginEnabled');
       expect(response.body).toHaveProperty('serverDomain');
+    });
+
+    it('should report email enabled when Resend is configured', async () => {
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+      process.env.RESEND_API_KEY = 're_test_key';
+      process.env.EMAIL_FROM = 'onboarding@resend.dev';
+      const app = createApp(null);
+
+      const response = await request(app).get('/api/config');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.emailEnabled).toBe(true);
     });
 
     it('should omit CloudFront cookie refresh from unauthenticated response (#12688)', async () => {

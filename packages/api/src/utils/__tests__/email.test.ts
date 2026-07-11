@@ -17,6 +17,7 @@ beforeEach(() => {
   delete process.env.EMAIL_FROM;
   delete process.env.MAILGUN_API_KEY;
   delete process.env.MAILGUN_DOMAIN;
+  delete process.env.RESEND_API_KEY;
 });
 
 afterAll(() => {
@@ -114,6 +115,19 @@ describe('checkEmailConfig', () => {
 
     it('returns false when Mailgun is partially configured', () => {
       process.env.MAILGUN_API_KEY = 'key-abc123';
+      expect(checkEmailConfig()).toBe(false);
+    });
+  });
+
+  describe('Resend configuration', () => {
+    it('returns true with Resend API key and EMAIL_FROM', () => {
+      process.env.RESEND_API_KEY = 're_test_key';
+      process.env.EMAIL_FROM = 'noreply@example.com';
+      expect(checkEmailConfig()).toBe(true);
+    });
+
+    it('returns false when Resend is partially configured', () => {
+      process.env.RESEND_API_KEY = 're_test_key';
       expect(checkEmailConfig()).toBe(false);
     });
   });

@@ -3,6 +3,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const nodemailer = require('nodemailer');
 const handlebars = require('handlebars');
+const { Resend } = require('resend');
 const { logger } = require('@librechat/data-schemas');
 const { logAxiosError, isEnabled, readFileAsString } = require('@librechat/api');
 
@@ -46,6 +47,40 @@ const sendEmailViaMailgun = async ({ to, from, subject, html }) => {
   } catch (error) {
     throw new Error(logAxiosError({ error, message: 'Failed to send email via Mailgun' }));
   }
+};
+
+/**
+ * Sends an email using Resend API.
+ *
+ * @async
+ * @function sendEmailViaResend
+ * @param {Object} params - The parameters for sending the email.
+ * @param {string} params.to - The recipient's email address.
+ * @param {string} params.from - The sender's email address.
+ * @param {string} params.subject - The subject of the email.
+ * @param {string} params.html - The HTML content of the email.
+ * @returns {Promise<Object>} - A promise that resolves to the response from Resend API.
+ */
+const sendEmailViaResend = async ({ to, from, subject, html }) => {
+  const resendApiKey = process.env.RESEND_API_KEY;
+
+  if (!resendApiKey) {
+    throw new Error('Resend API key is required');
+  }
+
+  const resend = new Resend(resendApiKey);
+  const { data, error } = await resend.emails.send({
+    from,
+    to,
+    subject,
+    html,
+  });
+
+  if (error) {
+    throw new Error(`Failed to send email via Resend: ${JSON.stringify(error)}`);
+  }
+
+  return data;
 };
 
 /**
@@ -106,6 +141,16 @@ const sendEmail = async ({ email, subject, payload, template, throwError = true 
     if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
       logger.debug('[sendEmail] Using Mailgun provider');
       return await sendEmailViaMailgun({
+        from: fromAddress,
+        to: toAddress,
+        subject: subject,
+        html: html,
+      });
+    }
+
+    if (process.env.RESEND_API_KEY) {
+      logger.debug('[sendEmail] Using Resend provider');
+      return await sendEmailViaResend({
         from: fromAddress,
         to: toAddress,
         subject: subject,

@@ -1,7 +1,14 @@
 const nodemailer = require('nodemailer');
 const { readFileAsString } = require('@librechat/api');
 
+const mockResendSend = jest.fn().mockResolvedValue({ data: { id: 'resend-id' }, error: null });
+
 jest.mock('nodemailer');
+jest.mock('resend', () => ({
+  Resend: jest.fn().mockImplementation(() => ({
+    emails: { send: mockResendSend },
+  })),
+}));
 jest.mock('@librechat/data-schemas', () => ({
   logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
@@ -17,6 +24,7 @@ const mockSendMail = jest.fn().mockResolvedValue({ messageId: 'test-id' });
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockResendSend.mockResolvedValue({ data: { id: 'resend-id' }, error: null });
   process.env = { ...savedEnv };
   process.env.EMAIL_HOST = 'smtp.example.com';
   process.env.EMAIL_PORT = '587';
@@ -26,6 +34,7 @@ beforeEach(() => {
   delete process.env.EMAIL_PASSWORD;
   delete process.env.MAILGUN_API_KEY;
   delete process.env.MAILGUN_DOMAIN;
+  delete process.env.RESEND_API_KEY;
   delete process.env.EMAIL_SERVICE;
   delete process.env.EMAIL_ENCRYPTION;
   delete process.env.EMAIL_ENCRYPTION_HOSTNAME;
@@ -44,6 +53,11 @@ function loadSendEmail() {
   jest.resetModules();
   jest.mock('nodemailer', () => ({
     createTransport: jest.fn().mockReturnValue({ sendMail: mockSendMail }),
+  }));
+  jest.mock('resend', () => ({
+    Resend: jest.fn().mockImplementation(() => ({
+      emails: { send: mockResendSend },
+    })),
   }));
   jest.mock('@librechat/data-schemas', () => ({
     logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -139,5 +153,36 @@ describe('sendEmail SMTP auth assembly', () => {
     await sendEmail(baseParams);
 
     expect(freshLogger.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('sendEmail Resend provider', () => {
+  it('sends through Resend when RESEND_API_KEY is configured', async () => {
+    process.env.RESEND_API_KEY = 're_test_key';
+    const sendEmail = loadSendEmail();
+    const { Resend } = require('resend');
+    const { createTransport } = require('nodemailer');
+
+    await expect(sendEmail(baseParams)).resolves.toEqual({ id: 'resend-id' });
+
+    expect(Resend).toHaveBeenCalledWith('re_test_key');
+    expect(mockResendSend).toHaveBeenCalledWith({
+      from: '"TestApp" <noreply@example.com>',
+      to: '"User" <user@example.com>',
+      subject: 'Test',
+      html: '<p>User</p>',
+    });
+    expect(createTransport).not.toHaveBeenCalled();
+  });
+
+  it('throws when Resend returns an error response', async () => {
+    process.env.RESEND_API_KEY = 're_test_key';
+    mockResendSend.mockResolvedValue({
+      data: null,
+      error: { message: 'Invalid API key' },
+    });
+    const sendEmail = loadSendEmail();
+
+    await expect(sendEmail(baseParams)).rejects.toThrow('Failed to send email via Resend');
   });
 });
