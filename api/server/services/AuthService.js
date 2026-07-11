@@ -55,6 +55,36 @@ const genericVerificationMessage = 'Please check your email to verify your email
 const invalidEmailVerificationMessage = 'Invalid or expired email verification token';
 const OPENID_SESSION_ID_TOKEN_EXPIRY_BUFFER_SECONDS = 30;
 
+const normalizeDomainList = (value) =>
+  (value ?? '')
+    .split(',')
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean);
+
+const emailDomain = (email) => {
+  const parts = String(email ?? '')
+    .toLowerCase()
+    .split('@');
+  return parts.length === 2 ? parts[1] : '';
+};
+
+const isStaraSignupAllowlistRequired = () =>
+  isEnabled(process.env.STARA_REQUIRE_SIGNUP_ALLOWLIST) ||
+  Boolean(process.env.STARA_API_URL || process.env.STARA_API_BASE_URL);
+
+const isStaraSignupDomainAllowed = (email) => {
+  if (!isStaraSignupAllowlistRequired()) {
+    return true;
+  }
+
+  const allowedDomains = normalizeDomainList(process.env.STARA_ALLOWED_SIGNUP_DOMAINS);
+  if (allowedDomains.length === 0) {
+    return false;
+  }
+
+  return allowedDomains.includes(emailDomain(email));
+};
+
 const findPasswordResetToken = async (userId) => {
   const typedToken = await findToken(
     {
@@ -325,9 +355,10 @@ const verifyEmail = async (req) => {
  * Register a new user.
  * @param {IUser} user <email, password, name, username>
  * @param {Partial<IUser>} [additionalData={}] Trusted server-provided fields, such as CLI overrides.
+ * @param {{allowInviteSignup?: boolean}} [options={}] Trusted route context for invite-based signup.
  * @returns {Promise<{status: number, message: string, user?: IUser}>}
  */
-const registerUser = async (user, additionalData = {}) => {
+const registerUser = async (user, additionalData = {}, options = {}) => {
   const result = registerSchema.safeParse(user);
   if (!result.success) {
     const errorMessage = errorsToString(result.error.errors);
@@ -347,6 +378,13 @@ const registerUser = async (user, additionalData = {}) => {
   try {
     const tenantId = getTenantId();
     const appConfig = await getAppConfig(tenantId ? { tenantId } : {});
+    if (!options.allowInviteSignup && !isStaraSignupDomainAllowed(email)) {
+      const errorMessage =
+        'The email address provided cannot be used. Please use a different email address.';
+      logger.error(`[registerUser] [Stara signup domain not allowlisted] [Email: ${user.email}]`);
+      return { status: 403, message: errorMessage };
+    }
+
     if (!isEmailDomainAllowed(email, appConfig?.registration?.allowedDomains)) {
       const errorMessage =
         'The email address provided cannot be used. Please use a different email address.';

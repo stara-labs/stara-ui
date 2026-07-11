@@ -42,9 +42,14 @@ const openIdClient = require('openid-client');
 const jwt = require('jsonwebtoken');
 const { logger } = require('@librechat/data-schemas');
 const { isEnabled, findOpenIDUser, buildOpenIDRefreshParams } = require('@librechat/api');
-const { graphTokenController, refreshController } = require('./AuthController');
+const {
+  graphTokenController,
+  refreshController,
+  registrationController,
+} = require('./AuthController');
 const { getGraphApiToken } = require('~/server/services/GraphTokenService');
 const {
+  registerUser,
   setOpenIDAuthTokens,
   setCloudFrontAuthCookies,
   setAuthTokens,
@@ -56,6 +61,30 @@ const ORIGINAL_OPENID_SCOPE = process.env.OPENID_SCOPE;
 const ORIGINAL_OPENID_REFRESH_AUDIENCE = process.env.OPENID_REFRESH_AUDIENCE;
 const ORIGINAL_JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+
+describe('registrationController', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    registerUser.mockResolvedValue({ status: 200, message: 'ok' });
+  });
+
+  it('passes validated invite context into registration', async () => {
+    const req = {
+      body: { email: 'invitee@example.com' },
+      invite: { token: 'valid-invite' },
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await registrationController(req, res);
+
+    expect(registerUser).toHaveBeenCalledWith(req.body, {}, { allowInviteSignup: true });
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.send).toHaveBeenCalledWith({ message: 'ok' });
+  });
+});
 
 describe('graphTokenController', () => {
   let req, res;

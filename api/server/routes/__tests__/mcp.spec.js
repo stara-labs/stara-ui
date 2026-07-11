@@ -158,6 +158,7 @@ jest.mock('~/cache', () => ({
 
 jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, res, next) => next(),
+  requireStaraAssurance: (req, res, next) => next(),
   canAccessMCPServerResource: () => (req, res, next) => next(),
 }));
 

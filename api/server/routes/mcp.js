@@ -43,7 +43,11 @@ const {
   resolveConfigServers,
   getMCPSetupData,
 } = require('~/server/services/MCP');
-const { requireJwtAuth, canAccessMCPServerResource } = require('~/server/middleware');
+const {
+  requireJwtAuth,
+  requireStaraAssurance,
+  canAccessMCPServerResource,
+} = require('~/server/middleware');
 const { getUserPluginAuthValue } = require('~/server/services/PluginService');
 const { updateMCPServerTools } = require('~/server/services/Config/mcp');
 const { reinitMCPServer } = require('~/server/services/Tools/mcp');
@@ -93,131 +97,143 @@ const checkMCPCreate = generateCheckAccess({
  * Get all MCP tools available to the user
  * Returns only MCP tools, completely decoupled from regular LibreChat tools
  */
-router.get('/tools', requireJwtAuth, checkMCPUsePermissions, async (req, res) => {
-  return getMCPTools(req, res);
-});
+router.get(
+  '/tools',
+  requireJwtAuth,
+  requireStaraAssurance,
+  checkMCPUsePermissions,
+  async (req, res) => {
+    return getMCPTools(req, res);
+  },
+);
 
 /**
  * Initiate OAuth flow
  * This endpoint is called when the user clicks the auth link in the UI
  */
-router.get('/:serverName/oauth/initiate', requireJwtAuth, setOAuthSession, async (req, res) => {
-  try {
-    const { serverName } = req.params;
-    const { userId, flowId } = req.query;
-    const user = req.user;
+router.get(
+  '/:serverName/oauth/initiate',
+  requireJwtAuth,
+  requireStaraAssurance,
+  setOAuthSession,
+  async (req, res) => {
+    try {
+      const { serverName } = req.params;
+      const { userId, flowId } = req.query;
+      const user = req.user;
 
-    // Verify the userId matches the authenticated user
-    if (typeof userId !== 'string' || userId !== user.id) {
-      return res.status(403).json({ error: 'User mismatch' });
-    }
+      // Verify the userId matches the authenticated user
+      if (typeof userId !== 'string' || userId !== user.id) {
+        return res.status(403).json({ error: 'User mismatch' });
+      }
 
-    const expectedFlowId = getOAuthFlowId(user.id, serverName);
-    if (typeof flowId !== 'string' || flowId !== expectedFlowId) {
-      logger.error('[MCP OAuth] Invalid flow ID for initiate request', {
-        serverName,
+      const expectedFlowId = getOAuthFlowId(user.id, serverName);
+      if (typeof flowId !== 'string' || flowId !== expectedFlowId) {
+        logger.error('[MCP OAuth] Invalid flow ID for initiate request', {
+          serverName,
+          userId,
+          flowId,
+          expectedFlowId,
+        });
+        return res.status(403).json({ error: 'Flow mismatch' });
+      }
+
+      logger.debug('[MCP OAuth] Initiate request', { serverName, userId, flowId });
+
+      const flowsCache = getLogStores(CacheKeys.FLOWS);
+      const flowManager = getFlowStateManager(flowsCache);
+
+      /** Flow state to retrieve OAuth config */
+      const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
+      if (!flowState) {
+        logger.error('[MCP OAuth] Flow state not found', { flowId });
+        return res.status(404).json({ error: 'Flow not found' });
+      }
+
+      const {
+        authorizationUrl: storedAuthorizationUrl,
+        serverName: flowServerName,
+        userId: flowUserId,
+        serverUrl,
+        oauth: oauthConfig,
+      } = flowState.metadata || {};
+
+      if (flowUserId && flowUserId !== user.id) {
+        logger.error('[MCP OAuth] Flow user mismatch', { flowId, userId, flowUserId });
+        return res.status(403).json({ error: 'User mismatch' });
+      }
+
+      if (flowServerName && flowServerName !== serverName) {
+        logger.error('[MCP OAuth] Flow server mismatch', { flowId, serverName, flowServerName });
+        return res.status(400).json({ error: 'Invalid flow state' });
+      }
+
+      const pendingAge = flowState.createdAt ? Date.now() - flowState.createdAt : Infinity;
+      const isFreshPendingFlow = flowState.status === 'PENDING' && pendingAge < PENDING_STALE_MS;
+      if (!isFreshPendingFlow) {
+        logger.error('[MCP OAuth] Flow is not active for initiation', {
+          flowId,
+          status: flowState.status,
+          pendingAge,
+        });
+        return res.status(400).json({ error: 'Invalid flow state' });
+      }
+
+      if (typeof storedAuthorizationUrl === 'string' && storedAuthorizationUrl.length > 0) {
+        logger.debug('[MCP OAuth] Reusing stored authorization URL', {
+          serverName,
+          userId,
+          flowId,
+        });
+        setOAuthCsrfCookie(res, flowId, OAUTH_CSRF_COOKIE_PATH);
+        return res.redirect(storedAuthorizationUrl);
+      }
+
+      if (!serverUrl || !oauthConfig) {
+        logger.error('[MCP OAuth] Missing server URL or OAuth config in flow state');
+        return res.status(400).json({ error: 'Invalid flow state' });
+      }
+
+      const configServers = await resolveConfigServers(req);
+      const oauthHeaders = await getOAuthHeaders(serverName, userId, configServers);
+      const registry = getMCPServersRegistry();
+      const { allowedDomains, allowedAddresses } = await registry.resolveAllowlists({
         userId,
-        flowId,
-        expectedFlowId,
+        role: req.user?.role,
       });
-      return res.status(403).json({ error: 'Flow mismatch' });
-    }
-
-    logger.debug('[MCP OAuth] Initiate request', { serverName, userId, flowId });
-
-    const flowsCache = getLogStores(CacheKeys.FLOWS);
-    const flowManager = getFlowStateManager(flowsCache);
-
-    /** Flow state to retrieve OAuth config */
-    const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
-    if (!flowState) {
-      logger.error('[MCP OAuth] Flow state not found', { flowId });
-      return res.status(404).json({ error: 'Flow not found' });
-    }
-
-    const {
-      authorizationUrl: storedAuthorizationUrl,
-      serverName: flowServerName,
-      userId: flowUserId,
-      serverUrl,
-      oauth: oauthConfig,
-    } = flowState.metadata || {};
-
-    if (flowUserId && flowUserId !== user.id) {
-      logger.error('[MCP OAuth] Flow user mismatch', { flowId, userId, flowUserId });
-      return res.status(403).json({ error: 'User mismatch' });
-    }
-
-    if (flowServerName && flowServerName !== serverName) {
-      logger.error('[MCP OAuth] Flow server mismatch', { flowId, serverName, flowServerName });
-      return res.status(400).json({ error: 'Invalid flow state' });
-    }
-
-    const pendingAge = flowState.createdAt ? Date.now() - flowState.createdAt : Infinity;
-    const isFreshPendingFlow = flowState.status === 'PENDING' && pendingAge < PENDING_STALE_MS;
-    if (!isFreshPendingFlow) {
-      logger.error('[MCP OAuth] Flow is not active for initiation', {
-        flowId,
-        status: flowState.status,
-        pendingAge,
-      });
-      return res.status(400).json({ error: 'Invalid flow state' });
-    }
-
-    if (typeof storedAuthorizationUrl === 'string' && storedAuthorizationUrl.length > 0) {
-      logger.debug('[MCP OAuth] Reusing stored authorization URL', {
+      const {
+        authorizationUrl,
+        flowId: oauthFlowId,
+        flowMetadata,
+      } = await MCPOAuthHandler.initiateOAuthFlow(
         serverName,
+        serverUrl,
         userId,
-        flowId,
-      });
-      setOAuthCsrfCookie(res, flowId, OAUTH_CSRF_COOKIE_PATH);
-      return res.redirect(storedAuthorizationUrl);
+        oauthHeaders,
+        oauthConfig,
+        allowedDomains,
+        undefined,
+        allowedAddresses,
+        getTenantId(),
+      );
+
+      logger.debug('[MCP OAuth] OAuth flow initiated', { oauthFlowId, authorizationUrl });
+
+      const oldState = flowState.metadata?.state;
+      if (typeof oldState === 'string') {
+        await MCPOAuthHandler.deleteStateMapping(oldState, flowManager);
+      }
+      const metadataWithUrl = { ...flowMetadata, authorizationUrl, tenantId: getTenantId() };
+      await flowManager.initFlow(oauthFlowId, 'mcp_oauth', metadataWithUrl);
+      await MCPOAuthHandler.storeStateMapping(flowMetadata.state, oauthFlowId, flowManager);
+      setOAuthCsrfCookie(res, oauthFlowId, OAUTH_CSRF_COOKIE_PATH);
+      res.redirect(authorizationUrl);
+    } catch (error) {
+      logger.error('[MCP OAuth] Failed to initiate OAuth', error);
+      res.status(500).json({ error: 'Failed to initiate OAuth' });
     }
-
-    if (!serverUrl || !oauthConfig) {
-      logger.error('[MCP OAuth] Missing server URL or OAuth config in flow state');
-      return res.status(400).json({ error: 'Invalid flow state' });
-    }
-
-    const configServers = await resolveConfigServers(req);
-    const oauthHeaders = await getOAuthHeaders(serverName, userId, configServers);
-    const registry = getMCPServersRegistry();
-    const { allowedDomains, allowedAddresses } = await registry.resolveAllowlists({
-      userId,
-      role: req.user?.role,
-    });
-    const {
-      authorizationUrl,
-      flowId: oauthFlowId,
-      flowMetadata,
-    } = await MCPOAuthHandler.initiateOAuthFlow(
-      serverName,
-      serverUrl,
-      userId,
-      oauthHeaders,
-      oauthConfig,
-      allowedDomains,
-      undefined,
-      allowedAddresses,
-      getTenantId(),
-    );
-
-    logger.debug('[MCP OAuth] OAuth flow initiated', { oauthFlowId, authorizationUrl });
-
-    const oldState = flowState.metadata?.state;
-    if (typeof oldState === 'string') {
-      await MCPOAuthHandler.deleteStateMapping(oldState, flowManager);
-    }
-    const metadataWithUrl = { ...flowMetadata, authorizationUrl, tenantId: getTenantId() };
-    await flowManager.initFlow(oauthFlowId, 'mcp_oauth', metadataWithUrl);
-    await MCPOAuthHandler.storeStateMapping(flowMetadata.state, oauthFlowId, flowManager);
-    setOAuthCsrfCookie(res, oauthFlowId, OAUTH_CSRF_COOKIE_PATH);
-    res.redirect(authorizationUrl);
-  } catch (error) {
-    logger.error('[MCP OAuth] Failed to initiate OAuth', error);
-    res.status(500).json({ error: 'Failed to initiate OAuth' });
-  }
-});
+  },
+);
 
 /**
  * OAuth callback handler
@@ -523,7 +539,7 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
  * Get OAuth tokens for a completed flow
  * This is primarily for user-level OAuth flows
  */
-router.get('/oauth/tokens/:flowId', requireJwtAuth, async (req, res) => {
+router.get('/oauth/tokens/:flowId', requireJwtAuth, requireStaraAssurance, async (req, res) => {
   try {
     const { flowId } = req.params;
     const user = req.user;
@@ -560,30 +576,36 @@ router.get('/oauth/tokens/:flowId', requireJwtAuth, async (req, res) => {
  * (e.g. during chat via SSE). The frontend should call this before opening the OAuth URL
  * so the callback can verify the browser matches the flow initiator.
  */
-router.post('/:serverName/oauth/bind', requireJwtAuth, setOAuthSession, async (req, res) => {
-  try {
-    const { serverName } = req.params;
-    const user = req.user;
+router.post(
+  '/:serverName/oauth/bind',
+  requireJwtAuth,
+  requireStaraAssurance,
+  setOAuthSession,
+  async (req, res) => {
+    try {
+      const { serverName } = req.params;
+      const user = req.user;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const flowId = getOAuthFlowId(user.id, serverName);
+      setOAuthCsrfCookie(res, flowId, OAUTH_CSRF_COOKIE_PATH);
+
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('[MCP OAuth] Failed to set CSRF binding cookie', error);
+      res.status(500).json({ error: 'Failed to bind OAuth flow' });
     }
-
-    const flowId = getOAuthFlowId(user.id, serverName);
-    setOAuthCsrfCookie(res, flowId, OAUTH_CSRF_COOKIE_PATH);
-
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('[MCP OAuth] Failed to set CSRF binding cookie', error);
-    res.status(500).json({ error: 'Failed to bind OAuth flow' });
-  }
-});
+  },
+);
 
 /**
  * Check OAuth flow status
  * This endpoint can be used to poll the status of an OAuth flow
  */
-router.get('/oauth/status/:flowId', requireJwtAuth, async (req, res) => {
+router.get('/oauth/status/:flowId', requireJwtAuth, requireStaraAssurance, async (req, res) => {
   try {
     const { flowId } = req.params;
     const user = req.user;
@@ -620,43 +642,48 @@ router.get('/oauth/status/:flowId', requireJwtAuth, async (req, res) => {
  * Cancel OAuth flow
  * This endpoint cancels a pending OAuth flow
  */
-router.post('/oauth/cancel/:serverName', requireJwtAuth, async (req, res) => {
-  try {
-    const { serverName } = req.params;
-    const user = req.user;
+router.post(
+  '/oauth/cancel/:serverName',
+  requireJwtAuth,
+  requireStaraAssurance,
+  async (req, res) => {
+    try {
+      const { serverName } = req.params;
+      const user = req.user;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
 
-    logger.info(`[MCP OAuth Cancel] Cancelling OAuth flow for ${serverName} by user ${user.id}`);
+      logger.info(`[MCP OAuth Cancel] Cancelling OAuth flow for ${serverName} by user ${user.id}`);
 
-    const flowsCache = getLogStores(CacheKeys.FLOWS);
-    const flowManager = getFlowStateManager(flowsCache);
-    const flowId = getOAuthFlowId(user.id, serverName);
-    const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
+      const flowsCache = getLogStores(CacheKeys.FLOWS);
+      const flowManager = getFlowStateManager(flowsCache);
+      const flowId = getOAuthFlowId(user.id, serverName);
+      const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
 
-    if (!flowState) {
-      logger.debug(`[MCP OAuth Cancel] No active flow found for ${serverName}`);
-      return res.json({
+      if (!flowState) {
+        logger.debug(`[MCP OAuth Cancel] No active flow found for ${serverName}`);
+        return res.json({
+          success: true,
+          message: 'No active OAuth flow to cancel',
+        });
+      }
+
+      await flowManager.failFlow(flowId, 'mcp_oauth', 'User cancelled OAuth flow');
+
+      logger.info(`[MCP OAuth Cancel] Successfully cancelled OAuth flow for ${serverName}`);
+
+      res.json({
         success: true,
-        message: 'No active OAuth flow to cancel',
+        message: `OAuth flow for ${serverName} cancelled successfully`,
       });
+    } catch (error) {
+      logger.error('[MCP OAuth Cancel] Failed to cancel OAuth flow', error);
+      res.status(500).json({ error: 'Failed to cancel OAuth flow' });
     }
-
-    await flowManager.failFlow(flowId, 'mcp_oauth', 'User cancelled OAuth flow');
-
-    logger.info(`[MCP OAuth Cancel] Successfully cancelled OAuth flow for ${serverName}`);
-
-    res.json({
-      success: true,
-      message: `OAuth flow for ${serverName} cancelled successfully`,
-    });
-  } catch (error) {
-    logger.error('[MCP OAuth Cancel] Failed to cancel OAuth flow', error);
-    res.status(500).json({ error: 'Failed to cancel OAuth flow' });
-  }
-});
+  },
+);
 
 /**
  * Reinitialize MCP server
@@ -665,6 +692,7 @@ router.post('/oauth/cancel/:serverName', requireJwtAuth, async (req, res) => {
 router.post(
   '/:serverName/reinitialize',
   requireJwtAuth,
+  requireStaraAssurance,
   checkMCPUsePermissions,
   setOAuthSession,
   async (req, res) => {
@@ -743,7 +771,7 @@ router.post(
  * Get connection status for all MCP servers
  * This endpoint returns all app level and user-scoped connection statuses from MCPManager without disconnecting idle connections
  */
-router.get('/connection/status', requireJwtAuth, async (req, res) => {
+router.get('/connection/status', requireJwtAuth, requireStaraAssurance, async (req, res) => {
   try {
     const user = req.user;
 
@@ -793,106 +821,117 @@ router.get('/connection/status', requireJwtAuth, async (req, res) => {
  * Get connection status for a single MCP server
  * This endpoint returns the connection status for a specific server for a given user
  */
-router.get('/connection/status/:serverName', requireJwtAuth, async (req, res) => {
-  try {
-    const user = req.user;
-    const { serverName } = req.params;
+router.get(
+  '/connection/status/:serverName',
+  requireJwtAuth,
+  requireStaraAssurance,
+  async (req, res) => {
+    try {
+      const user = req.user;
+      const { serverName } = req.params;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const { mcpConfig, appConnections, userConnections, oauthServers } = await getMCPSetupData(
+        user.id,
+        { role: user.role, tenantId: getTenantId() },
+      );
+
+      if (!mcpConfig[serverName]) {
+        return res
+          .status(404)
+          .json({ error: `MCP server '${serverName}' not found in configuration` });
+      }
+
+      const serverStatus = await getServerConnectionStatus(
+        user.id,
+        serverName,
+        mcpConfig[serverName],
+        appConnections,
+        userConnections,
+        oauthServers,
+      );
+
+      res.json({
+        success: true,
+        serverName,
+        connectionStatus: serverStatus.connectionState,
+        requiresOAuth: serverStatus.requiresOAuth,
+      });
+    } catch (error) {
+      logger.error(
+        `[MCP Per-Server Status] Failed to get connection status for ${req.params.serverName}`,
+        error,
+      );
+      res.status(500).json({ error: 'Failed to get connection status' });
     }
-
-    const { mcpConfig, appConnections, userConnections, oauthServers } = await getMCPSetupData(
-      user.id,
-      { role: user.role, tenantId: getTenantId() },
-    );
-
-    if (!mcpConfig[serverName]) {
-      return res
-        .status(404)
-        .json({ error: `MCP server '${serverName}' not found in configuration` });
-    }
-
-    const serverStatus = await getServerConnectionStatus(
-      user.id,
-      serverName,
-      mcpConfig[serverName],
-      appConnections,
-      userConnections,
-      oauthServers,
-    );
-
-    res.json({
-      success: true,
-      serverName,
-      connectionStatus: serverStatus.connectionState,
-      requiresOAuth: serverStatus.requiresOAuth,
-    });
-  } catch (error) {
-    logger.error(
-      `[MCP Per-Server Status] Failed to get connection status for ${req.params.serverName}`,
-      error,
-    );
-    res.status(500).json({ error: 'Failed to get connection status' });
-  }
-});
+  },
+);
 
 /**
  * Check which authentication values exist for a specific MCP server
  * This endpoint returns only boolean flags indicating if values are set, not the actual values
  */
-router.get('/:serverName/auth-values', requireJwtAuth, checkMCPUsePermissions, async (req, res) => {
-  try {
-    const { serverName } = req.params;
-    const user = req.user;
+router.get(
+  '/:serverName/auth-values',
+  requireJwtAuth,
+  requireStaraAssurance,
+  checkMCPUsePermissions,
+  async (req, res) => {
+    try {
+      const { serverName } = req.params;
+      const user = req.user;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
 
-    const configServers = await resolveConfigServers(req);
-    const serverConfig = await getMCPServersRegistry().getServerConfig(
-      serverName,
-      user.id,
-      configServers,
-    );
-    if (!serverConfig) {
-      return res.status(404).json({
-        error: `MCP server '${serverName}' not found in configuration`,
-      });
-    }
+      const configServers = await resolveConfigServers(req);
+      const serverConfig = await getMCPServersRegistry().getServerConfig(
+        serverName,
+        user.id,
+        configServers,
+      );
+      if (!serverConfig) {
+        return res.status(404).json({
+          error: `MCP server '${serverName}' not found in configuration`,
+        });
+      }
 
-    const pluginKey = `${Constants.mcp_prefix}${serverName}`;
-    const authValueFlags = {};
+      const pluginKey = `${Constants.mcp_prefix}${serverName}`;
+      const authValueFlags = {};
 
-    if (serverConfig.customUserVars && typeof serverConfig.customUserVars === 'object') {
-      for (const varName of Object.keys(serverConfig.customUserVars)) {
-        try {
-          const value = await getUserPluginAuthValue(user.id, varName, false, pluginKey);
-          authValueFlags[varName] = !!(value && value.length > 0);
-        } catch (err) {
-          logger.error(
-            `[MCP Auth Value Flags] Error checking ${varName} for user ${user.id}:`,
-            err,
-          );
-          authValueFlags[varName] = false;
+      if (serverConfig.customUserVars && typeof serverConfig.customUserVars === 'object') {
+        for (const varName of Object.keys(serverConfig.customUserVars)) {
+          try {
+            const value = await getUserPluginAuthValue(user.id, varName, false, pluginKey);
+            authValueFlags[varName] = !!(value && value.length > 0);
+          } catch (err) {
+            logger.error(
+              `[MCP Auth Value Flags] Error checking ${varName} for user ${user.id}:`,
+              err,
+            );
+            authValueFlags[varName] = false;
+          }
         }
       }
-    }
 
-    res.json({
-      success: true,
-      serverName,
-      authValueFlags,
-    });
-  } catch (error) {
-    logger.error(
-      `[MCP Auth Value Flags] Failed to check auth value flags for ${req.params.serverName}`,
-      error,
-    );
-    res.status(500).json({ error: 'Failed to check auth value flags' });
-  }
-});
+      res.json({
+        success: true,
+        serverName,
+        authValueFlags,
+      });
+    } catch (error) {
+      logger.error(
+        `[MCP Auth Value Flags] Failed to check auth value flags for ${req.params.serverName}`,
+        error,
+      );
+      res.status(500).json({ error: 'Failed to check auth value flags' });
+    }
+  },
+);
 
 async function getOAuthHeaders(serverName, userId, configServers) {
   const serverConfig = await getMCPServersRegistry().getServerConfig(
@@ -916,7 +955,13 @@ MCP Server CRUD Routes (User-Managed MCP Servers)
  * @param {string} [req.query.search] - Search query for title/description
  * @returns {MCPServerListResponse} 200 - Success response - application/json
  */
-router.get('/servers', requireJwtAuth, checkMCPUsePermissions, getMCPServersList);
+router.get(
+  '/servers',
+  requireJwtAuth,
+  requireStaraAssurance,
+  checkMCPUsePermissions,
+  getMCPServersList,
+);
 
 /**
  * Create a new MCP server
@@ -924,7 +969,13 @@ router.get('/servers', requireJwtAuth, checkMCPUsePermissions, getMCPServersList
  * @param {MCPServerCreateParams} req.body - The MCP server creation parameters.
  * @returns {MCPServer} 201 - Success response - application/json
  */
-router.post('/servers', requireJwtAuth, checkMCPCreate, createMCPServerController);
+router.post(
+  '/servers',
+  requireJwtAuth,
+  requireStaraAssurance,
+  checkMCPCreate,
+  createMCPServerController,
+);
 
 /**
  * Get single MCP server by ID
@@ -935,6 +986,7 @@ router.post('/servers', requireJwtAuth, checkMCPCreate, createMCPServerControlle
 router.get(
   '/servers/:serverName',
   requireJwtAuth,
+  requireStaraAssurance,
   checkMCPUsePermissions,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.VIEW,
@@ -953,6 +1005,7 @@ router.get(
 router.patch(
   '/servers/:serverName',
   requireJwtAuth,
+  requireStaraAssurance,
   checkMCPCreate,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.EDIT,
@@ -970,6 +1023,7 @@ router.patch(
 router.delete(
   '/servers/:serverName',
   requireJwtAuth,
+  requireStaraAssurance,
   checkMCPCreate,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.DELETE,
