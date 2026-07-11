@@ -1,6 +1,8 @@
-import { useMemo } from 'react';
+/* eslint-disable i18next/no-literal-string */
+import { useMemo, useState } from 'react';
 import { useMediaQuery } from '@librechat/client';
 import { NavLink as RouterNavLink, Navigate, useParams } from 'react-router-dom';
+import { ListPlus, PlayCircle, PlusCircle, ShieldCheck, Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   graphLinks,
@@ -124,6 +126,9 @@ function SectionContent({ sectionId }: { sectionId: StaraSectionId }) {
   }
   if (sectionId === 'tools') {
     return <ToolsSection />;
+  }
+  if (sectionId === 'recipes') {
+    return <RecipesSection />;
   }
   if (sectionId === 'heartbeat') {
     return <HeartbeatSection />;
@@ -265,6 +270,216 @@ function ToolsSection() {
         }
       />
     </Panel>
+  );
+}
+
+type BuilderMode = 'manual' | 'ai';
+
+type BuilderStage = {
+  title: string;
+  owner: string;
+  approval: boolean;
+};
+
+function RecipesSection() {
+  const [mode, setMode] = useState<BuilderMode>('ai');
+  const [goal, setGoal] = useState(
+    'Turn recurring customer and source signals into an approval-ready workflow.',
+  );
+  const [stages, setStages] = useState<BuilderStage[]>([
+    { title: 'Collect Sources', owner: 'Memory Curator', approval: false },
+    { title: 'Draft Work', owner: 'Workflow Reviewer', approval: false },
+    { title: 'Review And Handoff', owner: 'Operations Approver', approval: true },
+  ]);
+  const draftTitle =
+    mode === 'manual' ? 'Manual Workflow Draft' : `AI Assembly: ${goal.slice(0, 44)}`;
+  const stopPoints =
+    mode === 'manual'
+      ? ['External commitments require approval', 'Policy or memory changes require review']
+      : ['Publishing, spend, legal, safety, or customer promises require approval'];
+
+  const addStage = () =>
+    setStages((current) => [
+      ...current,
+      { title: `Stage ${current.length + 1}`, owner: 'Workflow Reviewer', approval: false },
+    ]);
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
+      <Panel title="Workflow Builder" eyebrow="Manual or AI-assisted setup">
+        <div className="grid gap-4">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-border-light bg-surface-primary p-1">
+            <BuilderModeButton active={mode === 'manual'} onClick={() => setMode('manual')}>
+              <ListPlus className="h-4 w-4" aria-hidden="true" />
+              Build manually
+            </BuilderModeButton>
+            <BuilderModeButton active={mode === 'ai'} onClick={() => setMode('ai')}>
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              Assemble with AI
+            </BuilderModeButton>
+          </div>
+
+          <label className="grid gap-2 text-sm font-medium text-text-primary">
+            {mode === 'manual' ? 'Workflow purpose' : 'Goal for Stara to assemble'}
+            <textarea
+              className="min-h-28 resize-y rounded-lg border border-border-light bg-surface-primary px-3 py-3 text-sm leading-6 text-text-primary outline-none focus:border-border-medium"
+              value={goal}
+              onChange={(event) => setGoal(event.target.value)}
+            />
+          </label>
+
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-text-primary">Stages</h3>
+              <button
+                type="button"
+                className="flex h-9 items-center gap-2 rounded-md border border-border-light bg-surface-primary px-3 text-sm font-medium text-text-primary hover:bg-surface-hover"
+                onClick={addStage}
+              >
+                <PlusCircle className="h-4 w-4" aria-hidden="true" />
+                Add stage
+              </button>
+            </div>
+            <div className="grid gap-2">
+              {stages.map((stage, index) => (
+                <div
+                  key={`${stage.title}-${index}`}
+                  className="grid gap-2 rounded-lg border border-border-light bg-surface-primary p-3 md:grid-cols-[minmax(0,1fr)_12rem_8rem]"
+                >
+                  <input
+                    className="h-10 min-w-0 rounded-md border border-border-light bg-surface-secondary px-3 text-sm text-text-primary outline-none focus:border-border-medium"
+                    value={stage.title}
+                    onChange={(event) =>
+                      setStages((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, title: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                  <select
+                    className="h-10 rounded-md border border-border-light bg-surface-secondary px-3 text-sm text-text-primary"
+                    value={stage.owner}
+                    onChange={(event) =>
+                      setStages((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, owner: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  >
+                    <option>Memory Curator</option>
+                    <option>Workflow Reviewer</option>
+                    <option>Operations Approver</option>
+                    <option>Human Owner</option>
+                  </select>
+                  <label className="flex h-10 items-center gap-2 rounded-md border border-border-light bg-surface-secondary px-3 text-xs font-medium text-text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={stage.approval}
+                      onChange={(event) =>
+                        setStages((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, approval: event.target.checked }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                    Approval
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel
+        title="Draft Preview"
+        eyebrow={mode === 'manual' ? 'User-built recipe' : 'AI assembly'}
+      >
+        <div className="grid gap-4">
+          <div className="rounded-lg border border-border-light bg-surface-primary p-4">
+            <div className="text-xs font-semibold uppercase tracking-normal text-text-secondary">
+              Draft
+            </div>
+            <h3 className="mt-1 text-base font-semibold text-text-primary">{draftTitle}</h3>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Default autonomy is review-gated. Bounded autonomous and agent-led modes require
+              owner/admin policy review before activation.
+            </p>
+          </div>
+
+          <div className="grid gap-2">
+            {[
+              ['Setup path', mode === 'manual' ? 'Manual builder' : 'AI-assisted assembler'],
+              ['Autonomy', 'Review-gated default'],
+              [
+                'Dry run',
+                `${stages.length} stages / ${stages.filter((stage) => stage.approval).length} approvals`,
+              ],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-text-secondary">{label}</span>
+                <span className="rounded-md bg-surface-active-alt px-2 py-1 font-medium text-text-primary">
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              Stop points
+            </div>
+            {stopPoints.map((point) => (
+              <div
+                key={point}
+                className="rounded-md border border-border-light bg-surface-primary px-3 py-2 text-sm text-text-secondary"
+              >
+                {point}
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="flex h-10 items-center justify-center gap-2 rounded-md border border-border-light bg-surface-active-alt px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
+          >
+            <PlayCircle className="h-4 w-4" aria-hidden="true" />
+            Dry run before activation
+          </button>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function BuilderModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        'flex min-h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition-colors',
+        active
+          ? 'bg-surface-active-alt text-text-primary'
+          : 'text-text-secondary hover:bg-surface-hover',
+      )}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 

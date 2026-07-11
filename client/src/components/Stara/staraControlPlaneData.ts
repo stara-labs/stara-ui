@@ -102,10 +102,10 @@ export const staraSections: StaraSection[] = [
   {
     id: 'recipes',
     label: 'Recipes',
-    description: 'Drafted workflows, approved templates, and recipe runs.',
+    description: 'Manual workflow builder, AI-assisted assembly, dry runs, and recipe runs.',
     icon: Sparkles,
-    metric: '6 drafts',
-    status: 'Drafting',
+    metric: '2 setup paths',
+    status: 'Builder',
   },
   {
     id: 'heartbeat',
@@ -229,8 +229,10 @@ export const launcherRows = [
 export const toolRows = [
   ['stara_memory_recall', 'Memory', 'Actor scope', 'Active'],
   ['stara_context_build', 'Context', 'Org scope', 'Active'],
-  ['stara_recipe_draft_from_conversation', 'Recipes', 'Actor scope', 'Pending service'],
-  ['stara_workflow_heartbeat', 'Heartbeat', 'Team scope', 'Pending service'],
+  ['stara_workflow_builder_create_blank', 'Recipes', 'Team scope', 'Active'],
+  ['stara_workflow_builder_assemble', 'Recipes', 'Team scope', 'Active'],
+  ['stara_workflow_builder_dry_run', 'Recipes', 'Team scope', 'Active'],
+  ['stara_workflow_heartbeat', 'Heartbeat', 'Team scope', 'Active'],
   ['stara_route_cost_summary', 'Routes', 'Admin view', 'Pending service'],
   ['stara_observability_trace_summary', 'Trace', 'Admin view', 'Pending service'],
 ];
