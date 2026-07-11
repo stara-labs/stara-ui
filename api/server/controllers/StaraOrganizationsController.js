@@ -157,6 +157,175 @@ const buildInviteLink = (rawToken) => {
   return base ? `${base}${path}` : path;
 };
 
+const staraApiBaseUrl = () =>
+  safeString(process.env.STARA_API_URL ?? process.env.STARA_API_BASE_URL, '', 2048).replace(
+    /\/+$/,
+    '',
+  );
+
+const isStaraApiConfigured = () => Boolean(staraApiBaseUrl());
+
+const staraApiHeaders = (user) => ({
+  'Content-Type': 'application/json',
+  'x-stara-user-id': getUserId(user),
+  'x-stara-actor-id': getUserId(user),
+  'x-stara-actor-email': normalizeEmail(user?.email),
+  'x-stara-email-verified': user?.emailVerified ? 'true' : 'false',
+  'x-stara-mfa-enrolled': user?.twoFactorEnabled ? 'true' : 'false',
+  ...(user?.tenantId ? { 'x-stara-tenant-id': user.tenantId } : {}),
+});
+
+const callStaraApi = async (user, path, options = {}) => {
+  const baseUrl = staraApiBaseUrl();
+  if (!baseUrl) {
+    const error = new Error('STARA_API_URL is not configured');
+    error.status = 503;
+    throw error;
+  }
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: options.method ?? 'GET',
+    headers: staraApiHeaders(user),
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    const error = new Error(payload.message ?? payload.error ?? 'Stara API request failed');
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
+};
+
+const apiTenantId = (orgOrTenant) => orgOrTenant?.tenant_id ?? orgOrTenant?.tenantId;
+
+const apiRoleKey = (member) => normalizeRoleKey(member?.role_key ?? member?.roleKey);
+
+const apiScopeIds = (member, fallbackRoleKey = 'member') => {
+  const fromApi = normalizeScopeIds(member?.scope_ids ?? member?.scopeIds);
+  if (fromApi.length) {
+    return fromApi;
+  }
+  return ['owner', 'admin'].includes(fallbackRoleKey) ? ALL_SCOPE_IDS : [];
+};
+
+const apiOrgStatusToLocal = (status) => (status === 'disabled' ? 'disabled' : 'active');
+
+const toMemberSummaryFromStaraApi = (member, org, userMap, localMembershipMap) => {
+  const userId = safeString(member.user_id);
+  const user = userMap.get(userId);
+  const localMembership = localMembershipMap.get(userId);
+  const roleKey = apiRoleKey(member);
+  return {
+    userId,
+    email: safeString(user?.email ?? member.email),
+    name: safeString(user?.name ?? user?.username ?? member.display_name ?? member.email, 'Member'),
+    username: safeString(user?.username),
+    avatar: safeString(user?.avatar),
+    tenantId: member.tenant_id,
+    orgName: safeString(org?.name ?? localMembership?.orgName, member.tenant_id),
+    roleKey,
+    roleLabel: ROLE_BUNDLES[roleKey].label,
+    status: member.status ?? 'active',
+    isDefault: Boolean(localMembership?.isDefault),
+    scopeIds: localMembership?.scopeIds?.length
+      ? localMembership.scopeIds
+      : apiScopeIds(member, roleKey),
+    groupIds: Array.isArray(localMembership?.groupIds) ? localMembership.groupIds : [],
+    createdAt: member.joined_at ?? localMembership?.createdAt ?? null,
+    updatedAt: member.updated_at ?? localMembership?.updatedAt ?? null,
+  };
+};
+
+const toInviteSummaryFromStaraApi = (invite, org, invitedByName) => {
+  const roleKey = apiRoleKey(invite);
+  return {
+    id: invite.invite_id,
+    tenantId: invite.tenant_id,
+    email: normalizeEmail(invite.email),
+    roleKey,
+    roleLabel: ROLE_BUNDLES[roleKey].label,
+    scopeIds: apiScopeIds(invite, roleKey),
+    groupIds: [],
+    status: invite.status === 'accepted' ? 'consumed' : invite.status,
+    invitedByName,
+    expiresAt: invite.expires_at,
+    createdAt: invite.created_at,
+    orgName: safeString(org?.name, invite.tenant_id),
+  };
+};
+
+const ensureTenantMirror = async ({ org, createdBy }) => {
+  const tenantId = apiTenantId(org);
+  const existing = await db.findTenant({ tenantId });
+  const data = {
+    tenantId,
+    name: safeString(org.name, tenantId, MAX_NAME_LENGTH),
+    slug: safeString(org.slug, tenantId, 80),
+    status: apiOrgStatusToLocal(org.status),
+    createdBy,
+  };
+
+  if (existing) {
+    return db.updateTenant({ tenantId }, data);
+  }
+
+  return db.createTenant(data);
+};
+
+const mirrorStaraApiMembership = async ({ user, org, membership, isDefault = false }) => {
+  const userId = safeString(membership?.user_id, getUserId(user));
+  const roleKey = apiRoleKey(membership);
+  const tenant = await ensureTenantMirror({ org, createdBy: getUserId(user) });
+  const localMembership = await db.upsertTenantMembership({
+    userId,
+    tenantId: apiTenantId(org),
+    orgName: tenant?.name ?? org.name,
+    roleKey,
+    roleLabel: ROLE_BUNDLES[roleKey].label,
+    status: membership?.status ?? 'active',
+    isDefault,
+    invitedEmail: normalizeEmail(membership?.email),
+    source: 'stara',
+    scopeIds: apiScopeIds(membership, roleKey),
+    groupIds: [],
+  });
+  await applyRoleGrants({
+    tenantId: apiTenantId(org),
+    userId,
+    roleKey,
+    grantedBy: getUserId(user),
+  });
+  return localMembership;
+};
+
+const syncStaraApiOrgsToMongo = async (user) => {
+  if (!isStaraApiConfigured()) {
+    return;
+  }
+  const response = await callStaraApi(user, '/v1/orgs');
+  for (const entry of response.orgs ?? []) {
+    await mirrorStaraApiMembership({
+      user,
+      org: entry.org,
+      membership: entry.membership,
+      isDefault: entry.org?.tenant_id === user?.tenantId,
+    });
+  }
+};
+
+const loadStaraApiUser = async (user) => {
+  const latestUser = await runAsSystem(async () =>
+    db.getUserById(
+      getUserId(user),
+      '_id id email username name tenantId idOnTheSource emailVerified twoFactorEnabled',
+    ),
+  );
+  return { ...(latestUser ?? user), tenantId: user?.tenantId ?? latestUser?.tenantId };
+};
+
 const toRoleBundleSummary = (bundle) => ({
   key: bundle.key,
   label: bundle.label,
@@ -340,7 +509,7 @@ const buildOrganizationsContext = async (user) => {
   const latestUser = await runAsSystem(async () =>
     db.getUserById(
       getUserId(user),
-      '_id email username name tenantId idOnTheSource personalization',
+      '_id email username name tenantId idOnTheSource personalization emailVerified twoFactorEnabled',
     ),
   );
   if (!latestUser) {
@@ -348,6 +517,8 @@ const buildOrganizationsContext = async (user) => {
     error.status = 404;
     throw error;
   }
+
+  await syncStaraApiOrgsToMongo(latestUser);
 
   const memberships = await db.listTenantMemberships({
     userId: getUserId(latestUser),
@@ -468,6 +639,31 @@ const createOrganizationController = async (req, res) => {
       return res.status(400).json({ message: 'Org name must be at least 2 characters' });
     }
 
+    if (isStaraApiConfigured()) {
+      const apiUser = await loadStaraApiUser(req.user);
+      const created = await callStaraApi(apiUser, '/v1/orgs', {
+        method: 'POST',
+        body: { name },
+      });
+      const tenantId = created.org.tenant_id;
+      const activated = await callStaraApi(
+        { ...apiUser, tenantId },
+        `/v1/orgs/${tenantId}/activate`,
+        {
+          method: 'POST',
+        },
+      );
+      await mirrorStaraApiMembership({
+        user: apiUser,
+        org: activated.org ?? created.org,
+        membership: created.membership,
+        isDefault: true,
+      });
+      await runAsSystem(async () => db.updateUser(getUserId(apiUser), { tenantId }));
+
+      return res.status(201).json(await buildOrganizationsContext({ ...apiUser, tenantId }));
+    }
+
     const tenantId = newTenantId();
     const slug = `${slugify(name)}-${crypto.randomBytes(3).toString('hex')}`;
     const tenant = await db.createTenant({
@@ -509,6 +705,27 @@ const createOrganizationController = async (req, res) => {
 const activateOrganizationController = async (req, res) => {
   try {
     const tenantId = safeString(req.params.tenantId);
+    if (isStaraApiConfigured()) {
+      const apiUser = await loadStaraApiUser({ ...req.user, tenantId });
+      await callStaraApi(apiUser, `/v1/orgs/${tenantId}/activate`, {
+        method: 'POST',
+      });
+      const remoteOrgs = await callStaraApi(apiUser, '/v1/orgs');
+      const entry = (remoteOrgs.orgs ?? []).find(
+        (candidate) => candidate.org?.tenant_id === tenantId,
+      );
+      if (entry) {
+        await mirrorStaraApiMembership({
+          user: apiUser,
+          org: entry.org,
+          membership: entry.membership,
+          isDefault: true,
+        });
+      }
+      await runAsSystem(async () => db.updateUser(getUserId(apiUser), { tenantId }));
+      return res.status(200).json(await buildOrganizationsContext(apiUser));
+    }
+
     await assertCanViewOrg(req.user, tenantId);
     const membership = await db.setDefaultTenantMembership(getUserId(req.user), tenantId);
     if (!membership) {
@@ -527,6 +744,27 @@ const activateOrganizationController = async (req, res) => {
 const listMembersController = async (req, res) => {
   try {
     const tenantId = safeString(req.params.tenantId);
+    if (isStaraApiConfigured()) {
+      const apiUser = await loadStaraApiUser({ ...req.user, tenantId });
+      await assertCanViewOrg(req.user, tenantId);
+      const [response, tenant, localMemberships] = await Promise.all([
+        callStaraApi(apiUser, `/v1/orgs/${tenantId}/members`),
+        db.findTenant({ tenantId }),
+        db.listTenantMemberships({ tenantId, status: ['active', 'invited', 'disabled'] }),
+      ]);
+      const userMap = await loadUsersById((response.members ?? []).map((member) => member.user_id));
+      const localMembershipMap = new Map(
+        localMemberships.map((membership) => [getObjectIdString(membership.userId), membership]),
+      );
+      return res
+        .status(200)
+        .json(
+          (response.members ?? []).map((member) =>
+            toMemberSummaryFromStaraApi(member, tenant, userMap, localMembershipMap),
+          ),
+        );
+    }
+
     await assertCanViewOrg(req.user, tenantId);
     const memberships = await db.listTenantMemberships({
       tenantId,
@@ -550,6 +788,35 @@ const updateMemberController = async (req, res) => {
   try {
     const tenantId = safeString(req.params.tenantId);
     const memberUserId = safeString(req.params.userId);
+    if (isStaraApiConfigured()) {
+      const apiUser = await loadStaraApiUser({ ...req.user, tenantId });
+      await assertCanManageOrg(req.user, tenantId);
+      const roleKey = req.body?.roleKey ? normalizeRoleKey(req.body.roleKey) : undefined;
+      const body = {};
+      if (roleKey) {
+        body.role_key = roleKey;
+      }
+      if (req.body?.status) {
+        body.status = req.body.status;
+      }
+      if (req.body?.scopeIds !== undefined) {
+        body.scope_ids = normalizeScopeIds(req.body.scopeIds);
+      }
+      const response = await callStaraApi(apiUser, `/v1/orgs/${tenantId}/members/${memberUserId}`, {
+        method: 'PATCH',
+        body,
+      });
+      const tenant = await db.findTenant({ tenantId });
+      await mirrorStaraApiMembership({
+        user: apiUser,
+        org: tenant ?? { tenant_id: tenantId, name: tenantId, slug: tenantId, status: 'active' },
+        membership: response.member,
+        isDefault: response.member.user_id === getUserId(apiUser) && apiUser.tenantId === tenantId,
+      });
+
+      return res.status(200).json(await buildOrganizationsContext(apiUser));
+    }
+
     await assertCanManageOrg(req.user, tenantId);
     const roleKey = req.body?.roleKey ? normalizeRoleKey(req.body.roleKey) : undefined;
     const nextStatus = req.body?.status;
@@ -596,6 +863,26 @@ const disableMemberController = async (req, res) => {
   try {
     const tenantId = safeString(req.params.tenantId);
     const memberUserId = safeString(req.params.userId);
+    if (isStaraApiConfigured()) {
+      const apiUser = await loadStaraApiUser({ ...req.user, tenantId });
+      await assertCanManageOrg(req.user, tenantId);
+      const response = await callStaraApi(apiUser, `/v1/orgs/${tenantId}/members/${memberUserId}`, {
+        method: 'PATCH',
+        body: { status: 'disabled' },
+      });
+      await db.updateTenantMembership(
+        { tenantId, userId: memberUserId },
+        { status: response.member?.status ?? 'disabled', isDefault: false },
+      );
+      await applyRoleGrants({
+        tenantId,
+        userId: memberUserId,
+        roleKey: 'member',
+        grantedBy: getUserId(apiUser),
+      });
+      return res.status(200).json(await buildOrganizationsContext(apiUser));
+    }
+
     await assertCanManageOrg(req.user, tenantId);
     await assertLastOwnerSafe({ tenantId, userId: memberUserId, nextStatus: 'disabled' });
     const membership = await db.updateTenantMembership(
@@ -632,6 +919,49 @@ const createInviteController = async (req, res) => {
     const tenant = await db.findTenant({ tenantId });
     if (!tenant || tenant.status !== 'active') {
       return res.status(404).json({ message: 'Org not found' });
+    }
+
+    if (isStaraApiConfigured()) {
+      const apiUser = await loadStaraApiUser({ ...req.user, tenantId });
+      const invitedByName = safeString(
+        apiUser?.name ?? apiUser?.username ?? apiUser?.email,
+        'A Stara user',
+      );
+      const response = await callStaraApi(apiUser, `/v1/orgs/${tenantId}/invites`, {
+        method: 'POST',
+        body: {
+          email,
+          role_key: roleKey,
+          scope_ids: normalizeScopeIds(
+            req.body?.scopeIds,
+            roleKey === 'owner' ? ALL_SCOPE_IDS : [],
+          ),
+          expires_in_days: 7,
+        },
+      });
+      const inviteLink = buildInviteLink(response.token);
+      let delivery = { sent: false, reason: 'resend_not_configured' };
+      try {
+        delivery = await sendInviteEmail({
+          email,
+          orgName: tenant.name,
+          inviterName: invitedByName,
+          inviteLink,
+        });
+      } catch (error) {
+        logger.warn('[StaraOrganizations] Invite email failed; returning fallback link', error);
+        delivery = { sent: false, reason: 'resend_failed' };
+      }
+
+      return res.status(201).json({
+        invite: toInviteSummaryFromStaraApi(response.invite, tenant, invitedByName),
+        delivery,
+        inviteLink: delivery.sent ? undefined : inviteLink,
+        context: await buildOrganizationsContext({
+          ...apiUser,
+          tenantId: adminMembership.tenantId,
+        }),
+      });
     }
 
     const rawToken = crypto.randomBytes(32).toString('base64url');
@@ -696,6 +1026,30 @@ const acceptInviteController = async (req, res) => {
     if (!rawToken) {
       return res.status(400).json({ message: 'Invite token is required' });
     }
+    if (isStaraApiConfigured()) {
+      const apiUser = await loadStaraApiUser(req.user);
+      const accepted = await callStaraApi(apiUser, '/v1/orgs/invites/accept', {
+        method: 'POST',
+        body: { token: rawToken },
+      });
+      await mirrorStaraApiMembership({
+        user: apiUser,
+        org: accepted.org,
+        membership: accepted.membership,
+        isDefault: true,
+      });
+      const tenantId = accepted.org.tenant_id;
+      const roleKey = apiRoleKey(accepted.membership);
+      await runAsSystem(async () => db.updateUser(getUserId(apiUser), { tenantId }));
+      await applyRoleGrants({
+        tenantId,
+        userId: getUserId(apiUser),
+        roleKey,
+        grantedBy: accepted.invite?.created_by_user_id,
+      });
+      return res.status(200).json(await buildOrganizationsContext({ ...apiUser, tenantId }));
+    }
+
     const tokenHash = await hashToken(rawToken);
     const token = await runAsSystem(async () =>
       db.findToken({ token: tokenHash, type: STARA_TENANT_INVITE }),
