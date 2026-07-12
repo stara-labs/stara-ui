@@ -6,6 +6,7 @@ require('dotenv').config();
 const DEFAULT_MONGO_URI = 'mongodb://127.0.0.1:27017/LibreChat-e2e';
 const DEFAULT_RUNTIME_ENV_PATH = path.resolve(__dirname, '../specs/.test-results/runtime-env.json');
 let mongoServer;
+let staraApiServer;
 
 function decodeMongoValue(value) {
   try {
@@ -150,7 +151,37 @@ async function maybeStartMemoryMongo() {
   console.log(`[e2e] Started memory MongoDB at ${process.env.MONGO_URI}`);
 }
 
+function e2eUserDomain() {
+  const email = process.env.E2E_USER_EMAIL || 'testuser@example.com';
+  return email.includes('@') ? email.split('@').pop().toLowerCase() : 'example.com';
+}
+
+async function maybeStartFakeStaraApi() {
+  if ((process.env.E2E_USE_FAKE_STARA_API ?? 'true') === 'false') {
+    return;
+  }
+
+  const host = process.env.E2E_STARA_API_HOST || '127.0.0.1';
+  const port = Number(process.env.E2E_STARA_API_PORT || 8770);
+  const { startFakeStaraApiServer } = require('./fake-stara-api-server');
+  staraApiServer = await startFakeStaraApiServer({ host, port });
+  process.env.STARA_API_URL = `http://${host}:${port}`;
+  process.env.STARA_ALLOWED_SIGNUP_DOMAINS =
+    process.env.E2E_STARA_ALLOWED_SIGNUP_DOMAINS || e2eUserDomain();
+  console.log(`[e2e] Started fake Stara API at ${process.env.STARA_API_URL}`);
+}
+
+async function closeServer(server) {
+  if (!server?.listening) {
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+}
+
 async function shutdown() {
+  await closeServer(staraApiServer);
   if (mongoServer) {
     await mongoServer.stop();
   }
@@ -168,6 +199,7 @@ process.once('SIGTERM', async () => {
 
 function startServer() {
   return maybeStartMemoryMongo()
+    .then(() => maybeStartFakeStaraApi())
     .then(() => {
       require(path.resolve(__dirname, '../../api/server/index.js'));
     })

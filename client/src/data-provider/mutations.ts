@@ -44,26 +44,6 @@ export const useSaveStaraOnboardingMutation = (
   );
 };
 
-export const useAcceptStaraTenantInviteMutation = (
-  options?: t.MutationOptions<t.TStaraOnboardingContext, string>,
-): UseMutationResult<t.TStaraOnboardingContext, unknown, string, unknown> => {
-  const queryClient = useQueryClient();
-  const { onSuccess, ..._options } = options || {};
-
-  return useMutation(
-    [MutationKeys.acceptStaraTenantInvite],
-    (inviteId: string) => dataService.acceptStaraTenantInvite(inviteId),
-    {
-      ..._options,
-      onSuccess: (data, variables, context) => {
-        queryClient.setQueryData([QueryKeys.staraOnboarding], data);
-        queryClient.invalidateQueries([QueryKeys.user]);
-        onSuccess?.(data, variables, context);
-      },
-    },
-  );
-};
-
 export const useActivateStaraTenantMutation = (
   options?: t.MutationOptions<t.TStaraOnboardingContext, string>,
 ): UseMutationResult<t.TStaraOnboardingContext, unknown, string, unknown> => {
