@@ -48,6 +48,7 @@ jest.mock('../Root', () => ({
 }));
 
 import { router } from '../index';
+import { staraSections } from '~/components/Stara/staraControlPlaneData';
 
 type RouteNode = {
   path?: string;
@@ -75,12 +76,8 @@ describe('skills routes', () => {
 
     expect(paths).toContain('stara');
     expect(paths).toContain('stara/:section');
-    expect(paths).toContain('stara/launcher');
-    expect(paths).toContain('stara/vault');
-    expect(paths).toContain('stara/context');
-    expect(paths).toContain('stara/approvals');
-    expect(paths).toContain('stara/heartbeat');
-    expect(paths).toContain('stara/route-summary');
-    expect(paths).toContain('stara/trace-summary');
+    staraSections.forEach((section) => {
+      expect(paths).toContain(`stara/${section.id}`);
+    });
   });
 });

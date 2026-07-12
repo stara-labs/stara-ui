@@ -70,12 +70,18 @@ const loadStaraInviteAcceptView = () =>
 
 const staraShellSections = [
   'launcher',
-  'vault',
   'context',
+  'organization',
+  'vault',
+  'objects',
+  'tools',
+  'agents',
+  'recipes',
   'approvals',
   'heartbeat',
   'route-summary',
   'trace-summary',
+  'settings',
 ] as const;
 
 const staraShellRoutes = staraShellSections.map((section) => ({

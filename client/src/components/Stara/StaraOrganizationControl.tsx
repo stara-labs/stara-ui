@@ -1,5 +1,6 @@
 /* eslint-disable i18next/no-literal-string */
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button, Spinner, useToastContext } from '@librechat/client';
 import {
   AccessRoleIds,
@@ -12,6 +13,7 @@ import {
   Building2,
   Check,
   GitBranch,
+  PlusCircle,
   RefreshCw,
   ShieldCheck,
   UserPlus,
@@ -22,6 +24,7 @@ import {
   useUpdateResourcePermissionsMutation,
 } from 'librechat-data-provider/react-query';
 import type { Agent, TPrincipal, TStaraOrgMember, TStaraOrgTeam } from 'librechat-data-provider';
+import type { ReactNode } from 'react';
 import {
   useStaraOrganizationsContextQuery,
   useUpdateStaraOrganizationMemberMutation,
@@ -398,6 +401,15 @@ function AgentAssignment({
         <EmptyState
           title="No shareable agents"
           body="Create an agent or open an agent you own, then return here once you have share access."
+          action={
+            <Link
+              to="/agents"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border-light bg-surface-active-alt px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
+            >
+              <PlusCircle className="h-4 w-4" aria-hidden="true" />
+              Create an agent
+            </Link>
+          }
         />
       )}
     </section>
@@ -440,7 +452,7 @@ function LoadingPanel({ label }: { label: string }) {
   );
 }
 
-function EmptyState({ title, body }: { title: string; body: string }) {
+function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
     <div className="rounded-lg border border-dashed border-border-light bg-surface-secondary p-6">
       <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
@@ -448,6 +460,7 @@ function EmptyState({ title, body }: { title: string; body: string }) {
         {title}
       </div>
       <p className="mt-2 text-sm leading-6 text-text-secondary">{body}</p>
+      {action ? <div className="mt-4">{action}</div> : null}
     </div>
   );
 }
