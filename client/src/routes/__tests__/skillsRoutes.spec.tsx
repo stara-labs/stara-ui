@@ -1,4 +1,5 @@
 import React from 'react';
+import { matchRoutes } from 'react-router-dom';
 
 jest.mock('~/components/Auth', () => ({
   Login: () => null,
@@ -72,12 +73,15 @@ describe('skills routes', () => {
   });
 
   it('registers Stara control plane routes', () => {
-    const paths = flattenPaths((router as unknown as { routes: RouteNode[] }).routes);
+    const routes = (router as unknown as { routes: RouteNode[] }).routes;
+    const paths = flattenPaths(routes);
 
     expect(paths).toContain('stara');
     expect(paths).toContain('stara/:section');
     staraSections.forEach((section) => {
-      expect(paths).toContain(`stara/${section.id}`);
+      expect(paths).not.toContain(`stara/${section.id}`);
+      const matches = matchRoutes(routes, `/stara/${section.id}`);
+      expect(matches?.at(-1)?.route.path).toBe('stara/:section');
     });
   });
 });

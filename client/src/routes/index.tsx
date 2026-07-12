@@ -68,27 +68,6 @@ const loadStaraInviteAcceptView = () =>
     Component: m.default,
   }));
 
-const staraShellSections = [
-  'launcher',
-  'context',
-  'organization',
-  'vault',
-  'objects',
-  'tools',
-  'agents',
-  'recipes',
-  'approvals',
-  'heartbeat',
-  'route-summary',
-  'trace-summary',
-  'settings',
-] as const;
-
-const staraShellRoutes = staraShellSections.map((section) => ({
-  path: `stara/${section}`,
-  lazy: loadStaraControlPlaneView,
-}));
-
 const baseEl = document.querySelector('base');
 const baseHref = baseEl?.getAttribute('href') || '/';
 
@@ -224,7 +203,6 @@ export const router = createBrowserRouter(
                 </MarketplaceProvider>
               ),
             },
-            ...staraShellRoutes,
             {
               path: 'stara',
               lazy: loadStaraControlPlaneView,
