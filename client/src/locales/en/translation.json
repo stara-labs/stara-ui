@@ -1703,7 +1703,6 @@
   "com_ui_stara_onboarding_no_invite_title": "No org invite found",
   "com_ui_stara_onboarding_org_addendum": "Org addendum",
   "com_ui_stara_onboarding_org_addendum_complete_var": "{{orgName}} addendum complete",
-  "com_ui_stara_onboarding_pending_invites": "Pending invites",
   "com_ui_stara_onboarding_restricted_title": "How should Stara handle restricted areas?",
   "com_ui_stara_onboarding_return_to_chat": "Return to chat",
   "com_ui_stara_onboarding_run_again": "Run again",
