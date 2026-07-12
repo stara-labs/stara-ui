@@ -4,7 +4,65 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import StaraControlPlaneView from '../StaraControlPlaneView';
 
 jest.mock('@librechat/client', () => ({
+  Button: ({ children, size, variant, ...props }: any) => {
+    void size;
+    void variant;
+    return (
+      <button type="button" {...props}>
+        {children}
+      </button>
+    );
+  },
+  Spinner: (props: any) => <span data-testid="spinner" {...props} />,
   useMediaQuery: () => false,
+  useToastContext: () => ({ showToast: jest.fn() }),
+}));
+
+jest.mock('librechat-data-provider/react-query', () => ({
+  useGetResourcePermissionsQuery: () => ({
+    data: { principals: [] },
+    isLoading: false,
+  }),
+  useUpdateResourcePermissionsMutation: () => ({
+    isLoading: false,
+    mutateAsync: jest.fn(),
+  }),
+}));
+
+jest.mock('~/data-provider', () => ({
+  useStaraOrganizationsContextQuery: () => ({
+    data: {
+      activeOrg: {
+        name: 'Stara Labs',
+        roleLabel: 'Owner',
+        tenantId: 'tenant_stara',
+      },
+      members: [],
+      permissions: { canManageTeams: true },
+      scopedAccess: { scopeIds: [] },
+      teams: [],
+    },
+    isFetching: false,
+    isLoading: false,
+    refetch: jest.fn(),
+  }),
+  useUpdateStaraOrganizationMemberMutation: () => ({
+    isLoading: false,
+    mutateAsync: jest.fn(),
+  }),
+  useUpdateStaraOrganizationTeamMutation: () => ({
+    isLoading: false,
+    mutateAsync: jest.fn(),
+  }),
+}));
+
+jest.mock('~/data-provider/Agents', () => ({
+  useListAgentsQuery: () => ({
+    data: { data: [] },
+    isFetching: false,
+    isLoading: false,
+    refetch: jest.fn(),
+  }),
 }));
 
 describe('StaraControlPlaneView', () => {
@@ -49,5 +107,21 @@ describe('StaraControlPlaneView', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Vault / Context' })).toBeInTheDocument();
+  });
+
+  it('renders an agent creation CTA when there are no shareable agents', () => {
+    render(
+      <MemoryRouter initialEntries={['/stara/organization']}>
+        <Routes>
+          <Route path="/stara/:section" element={<StaraControlPlaneView />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('No shareable agents')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Create an agent' })).toHaveAttribute(
+      'href',
+      '/agents',
+    );
   });
 });
