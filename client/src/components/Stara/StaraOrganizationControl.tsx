@@ -1,37 +1,16 @@
 /* eslint-disable i18next/no-literal-string */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { PermissionBits } from 'librechat-data-provider';
 import { Button, Spinner, useToastContext } from '@librechat/client';
-import {
-  AccessRoleIds,
-  PermissionBits,
-  PrincipalType,
-  ResourceType,
-} from 'librechat-data-provider';
-import {
-  Bot,
-  Building2,
-  Check,
-  GitBranch,
-  PlusCircle,
-  RefreshCw,
-  ShieldCheck,
-  UserPlus,
-  Users,
-} from 'lucide-react';
-import {
-  useGetResourcePermissionsQuery,
-  useUpdateResourcePermissionsMutation,
-} from 'librechat-data-provider/react-query';
-import type { Agent, TPrincipal, TStaraOrgMember, TStaraOrgTeam } from 'librechat-data-provider';
+import { Bot, Building2, GitBranch, PlusCircle, RefreshCw, UserPlus, Users } from 'lucide-react';
+import type { Agent, TStaraOrgMember, TStaraOrgTeam } from 'librechat-data-provider';
 import type { ReactNode } from 'react';
 import {
   useStaraOrganizationsContextQuery,
-  useUpdateStaraOrganizationMemberMutation,
   useUpdateStaraOrganizationTeamMutation,
 } from '~/data-provider';
 import { useListAgentsQuery } from '~/data-provider/Agents';
-import { cn } from '~/utils';
 
 type OrgMember = TStaraOrgMember & {
   teamIds: string[];
@@ -40,18 +19,15 @@ type OrgMember = TStaraOrgMember & {
 const displayName = (member: TStaraOrgMember) => member.name || member.email || member.userId;
 
 const isMemberOnTeam = (member: TStaraOrgMember, team: TStaraOrgTeam) =>
-  member.groupIds.includes(team.id) || team.memberIds.includes(member.userId);
+  team.memberIds.includes(member.userId);
 
 export default function StaraOrganizationControl() {
   const { showToast } = useToastContext();
   const orgQuery = useStaraOrganizationsContextQuery();
   const agentQuery = useListAgentsQuery(
-    { limit: 100, requiredPermission: PermissionBits.SHARE },
+    { limit: 100, requiredPermission: PermissionBits.VIEW },
     { staleTime: 1000 * 30 },
   );
-  const updateMember = useUpdateStaraOrganizationMemberMutation({
-    onError: () => showToast({ message: 'Could not update team assignment', status: 'error' }),
-  });
   const updateTeam = useUpdateStaraOrganizationTeamMutation({
     onError: () => showToast({ message: 'Could not update org chart', status: 'error' }),
   });
@@ -76,18 +52,10 @@ export default function StaraOrganizationControl() {
       return;
     }
     const isAssigned = member.teamIds.includes(team.id);
-    const nextGroupIds = isAssigned
-      ? member.groupIds.filter((groupId) => groupId !== team.id)
-      : [...new Set([...member.groupIds, team.id])];
     const nextMemberIds = isAssigned
       ? team.memberIds.filter((memberId) => memberId !== member.userId)
       : [...new Set([...team.memberIds, member.userId])];
 
-    await updateMember.mutateAsync({
-      tenantId: activeTenantId,
-      userId: member.userId,
-      payload: { groupIds: nextGroupIds },
-    });
     await updateTeam.mutateAsync({
       tenantId: activeTenantId,
       teamId: team.id,
@@ -146,7 +114,7 @@ export default function StaraOrganizationControl() {
         </div>
         <div className="grid gap-3 md:grid-cols-3">
           <Metric label="Role" value={data.activeOrg.roleLabel} />
-          <Metric label="Scoped areas" value={`${data.scopedAccess.scopeIds.length || 'All'}`} />
+          <Metric label="Scoped areas" value={`${data.scopedAccess.scopeIds.length || 'None'}`} />
           <Metric label="Admin mode" value={canManageTeams ? 'Enabled' : 'Read only'} />
         </div>
       </section>
@@ -157,10 +125,10 @@ export default function StaraOrganizationControl() {
           members={members}
           unassignedMembers={unassignedMembers}
           canManage={canManageTeams}
-          isSaving={updateMember.isLoading || updateTeam.isLoading}
+          isSaving={updateTeam.isLoading}
           onToggleMember={assignMemberToTeam}
         />
-        <AgentAssignment teams={data.teams} agents={agents} loading={agentQuery.isLoading} />
+        <AgentDirectory agents={agents} loading={agentQuery.isLoading} />
       </section>
     </div>
   );
@@ -206,7 +174,7 @@ function OrgChart({
                       {team.name}
                     </h3>
                     <p className="mt-1 truncate text-xs text-text-secondary">
-                      {team.description || 'Local tenant team'}
+                      {team.description || 'Organization team'}
                     </p>
                   </div>
                   <span className="rounded-md bg-surface-active-alt px-2 py-1 text-xs font-medium text-text-primary">
@@ -272,60 +240,9 @@ function OrgChart({
   );
 }
 
-function AgentAssignment({
-  teams,
-  agents,
-  loading,
-}: {
-  teams: TStaraOrgTeam[];
-  agents: Agent[];
-  loading: boolean;
-}) {
-  const [selectedAgentId, setSelectedAgentId] = useState('');
-  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? agents[0];
-  const selectedResourceId = selectedAgent?._id ?? '';
-
-  const permissionsQuery = useGetResourcePermissionsQuery(ResourceType.AGENT, selectedResourceId, {
-    enabled: Boolean(selectedResourceId),
-  });
-  const updatePermissions = useUpdateResourcePermissionsMutation();
-  const { showToast } = useToastContext();
-
-  const shares = permissionsQuery.data?.principals ?? [];
-  const assignedTeamIds = new Set(
-    shares
-      .filter((share) => share.type === PrincipalType.GROUP)
-      .map((share) => share.id ?? share.idOnTheSource)
-      .filter(Boolean),
-  );
-
-  const toggleTeamAgentAccess = async (team: TStaraOrgTeam) => {
-    if (!selectedResourceId || updatePermissions.isLoading) {
-      return;
-    }
-    const principal: TPrincipal = {
-      type: PrincipalType.GROUP,
-      id: team.id,
-      idOnTheSource: team.id,
-      name: team.name,
-      source: team.source,
-      description: team.description,
-      accessRoleId: AccessRoleIds.AGENT_VIEWER,
-    };
-    const isAssigned = assignedTeamIds.has(team.id);
-    await updatePermissions.mutateAsync({
-      resourceType: ResourceType.AGENT,
-      resourceId: selectedResourceId,
-      data: {
-        updated: isAssigned ? [] : [principal],
-        removed: isAssigned ? [principal] : [],
-      },
-    });
-    showToast({ message: isAssigned ? 'Agent unassigned from team' : 'Agent assigned to team' });
-  };
-
+function AgentDirectory({ agents, loading }: { agents: Agent[]; loading: boolean }) {
   if (loading) {
-    return <LoadingPanel label="Loading assignable agents..." />;
+    return <LoadingPanel label="Loading agents..." />;
   }
 
   return (
@@ -333,69 +250,35 @@ function AgentAssignment({
       <div className="mb-4">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-text-secondary">
           <Bot className="h-4 w-4" aria-hidden="true" />
-          Agent assignment
+          Agents
         </div>
-        <h2 className="mt-1 text-base font-semibold text-text-primary">Grant teams agent access</h2>
-        <p className="mt-1 text-sm leading-6 text-text-secondary">
-          Assignments write to the existing agent ACL as team viewer grants.
-        </p>
+        <h2 className="mt-1 text-base font-semibold text-text-primary">Organization agents</h2>
       </div>
 
       {agents.length ? (
         <div className="grid gap-3">
-          <label className="grid gap-1 text-xs font-medium text-text-secondary">
-            Agent
-            <select
-              className="h-10 rounded-md border border-border-light bg-surface-primary px-3 text-sm text-text-primary"
-              value={selectedAgent?.id ?? ''}
-              onChange={(event) => setSelectedAgentId(event.target.value)}
-            >
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name || agent.id}
-                </option>
-              ))}
-            </select>
-          </label>
-
           <div className="grid gap-2">
-            {teams.map((team) => {
-              const checked = assignedTeamIds.has(team.id);
-              return (
-                <button
-                  key={team.id}
-                  type="button"
-                  className={cn(
-                    'flex items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors',
-                    checked
-                      ? 'border-green-500/40 bg-green-500/10'
-                      : 'border-border-light bg-surface-primary hover:bg-surface-hover',
-                  )}
-                  disabled={permissionsQuery.isLoading || updatePermissions.isLoading}
-                  onClick={() => toggleTeamAgentAccess(team)}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-text-primary">
-                      {team.name}
-                    </span>
-                    <span className="block truncate text-xs text-text-secondary">
-                      {team.memberIds.length} members
-                    </span>
-                  </span>
-                  {checked ? (
-                    <Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-300" />
-                  ) : (
-                    <ShieldCheck className="h-4 w-4 shrink-0 text-text-secondary" />
-                  )}
-                </button>
-              );
-            })}
-            {!teams.length ? (
-              <p className="rounded-md border border-dashed border-border-light px-3 py-2 text-xs text-text-secondary">
-                Create teams in Settings, Organizations before assigning agents.
-              </p>
-            ) : null}
+            {agents.slice(0, 8).map((agent) => (
+              <div
+                key={agent.id}
+                className="rounded-md border border-border-light bg-surface-primary px-3 py-2"
+              >
+                <span className="block truncate text-sm font-medium text-text-primary">
+                  {agent.name || agent.id}
+                </span>
+                <span className="block truncate text-xs text-text-secondary">
+                  {agent.description || 'No description'}
+                </span>
+              </div>
+            ))}
           </div>
+          <Link
+            to="/agents"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border-light bg-surface-active-alt px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover"
+          >
+            <Bot className="h-4 w-4" aria-hidden="true" />
+            Manage agents
+          </Link>
         </div>
       ) : (
         <EmptyState

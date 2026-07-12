@@ -316,7 +316,7 @@ export type TStaraOrgTeam = {
   name: string;
   description?: string;
   memberIds: string[];
-  source: 'local' | 'entra';
+  source: 'stara' | 'entra';
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
 };
@@ -365,14 +365,12 @@ export type TUpdateStaraOrgMemberRequest = {
   roleKey?: StaraOrgRoleKey;
   status?: StaraTenantMembershipStatus;
   scopeIds?: string[];
-  groupIds?: string[];
 };
 
 export type TCreateStaraOrgInviteRequest = {
   email: string;
   roleKey: StaraOrgRoleKey;
   scopeIds?: string[];
-  groupIds?: string[];
 };
 
 export type TCreateStaraOrgInviteResponse = {

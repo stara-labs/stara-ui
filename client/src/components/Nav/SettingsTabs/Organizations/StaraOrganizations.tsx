@@ -298,7 +298,7 @@ export default function StaraOrganizationsSettings() {
             <Header
               icon={ShieldCheck}
               title="Teams and scoped access"
-              description="Teams are local tenant groups; scopes describe which Stara surfaces a member can reach."
+              description="Teams and scopes are enforced by the organization access policy."
             />
             {canManage ? (
               <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
