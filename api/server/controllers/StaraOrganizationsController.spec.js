@@ -2,94 +2,42 @@ jest.mock('node-fetch', () => jest.fn());
 
 const fetch = require('node-fetch');
 
-jest.mock('mongoose', () => ({
-  Types: {
-    ObjectId: {
-      isValid: jest.fn(() => false),
-    },
-  },
-  models: {},
-}));
-
-jest.mock('librechat-data-provider', () => ({
-  PrincipalType: {
-    USER: 'user',
-  },
-}));
-
 jest.mock('@librechat/data-schemas', () => ({
-  SystemCapabilities: {
-    ACCESS_ADMIN: 'access_admin',
-    MANAGE_USERS: 'manage_users',
-    MANAGE_GROUPS: 'manage_groups',
-    MANAGE_ROLES: 'manage_roles',
-    MANAGE_CONFIGS: 'manage_configs',
-    ASSIGN_CONFIGS: 'assign_configs',
-    MANAGE_AGENTS: 'manage_agents',
-    MANAGE_MCP_SERVERS: 'manage_mcp_servers',
-    MANAGE_PROMPTS: 'manage_prompts',
-    MANAGE_SKILLS: 'manage_skills',
-    MANAGE_SHARED_LINKS: 'manage_shared_links',
-    MANAGE_ASSISTANTS: 'manage_assistants',
-    READ_USAGE: 'read_usage',
-    READ_AUDIT_LOG: 'read_audit_log',
-  },
-  hashToken: jest.fn(async (token) => `hash:${token}`),
   logger: {
     debug: jest.fn(),
     error: jest.fn(),
     warn: jest.fn(),
     info: jest.fn(),
   },
-  runAsSystem: jest.fn((fn) => fn()),
 }));
 
 jest.mock('~/models', () => ({
-  createTenant: jest.fn(async (data) => ({ ...data, createdAt: '2026-07-11T00:00:00.000Z' })),
-  updateTenant: jest.fn(async (_query, data) => ({
-    ...data,
-    updatedAt: '2026-07-11T00:00:00.000Z',
-  })),
-  findTenant: jest.fn(),
-  listTenants: jest.fn(),
-  findUsers: jest.fn(async () => []),
   getUserById: jest.fn(),
   updateUser: jest.fn(),
-  upsertTenantMembership: jest.fn(async (data) => ({
-    ...data,
-    createdAt: '2026-07-11T00:00:00.000Z',
-  })),
-  updateTenantMembership: jest.fn(async (_query, data) => data),
-  findTenantMembership: jest.fn(),
-  listTenantMemberships: jest.fn(),
-  setDefaultTenantMembership: jest.fn(),
-  findTokens: jest.fn(async () => []),
-  createToken: jest.fn(),
-  findToken: jest.fn(),
-  deleteTokens: jest.fn(),
-  revokeCapability: jest.fn(),
-  grantCapability: jest.fn(),
 }));
 
 const db = require('~/models');
 const {
   acceptInviteController,
+  activateOrganizationController,
   createInviteController,
   createOrganizationController,
+  getOrganizationsContextController,
 } = require('./StaraOrganizationsController');
 
 const originalStaraApiUrl = process.env.STARA_API_URL;
 const originalResendApiKey = process.env.RESEND_API_KEY;
 const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
 
-describe('StaraOrganizationsController stara-api migration', () => {
+describe('StaraOrganizationsController canonical API proxy', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.STARA_API_URL = 'http://stara-api:3081';
     process.env.APP_PUBLIC_URL = 'https://control-plane.stara.co';
     process.env.RESEND_API_KEY = '';
     process.env.RESEND_FROM_EMAIL = '';
-    seedContextMocks();
+    db.getUserById.mockResolvedValue(makeUser());
+    db.updateUser.mockResolvedValue(makeUser({ tenantId: 'tenant_acme-health' }));
   });
 
   afterAll(() => {
@@ -98,174 +46,215 @@ describe('StaraOrganizationsController stara-api migration', () => {
     restoreEnv('RESEND_FROM_EMAIL', originalResendFromEmail);
   });
 
-  it('creates organizations through stara-api and mirrors tenant compatibility fields', async () => {
-    mockFetchJson([
-      {
-        org: apiOrg('draft'),
-        membership: apiMember('owner'),
-        policy_config: { regulated_data_classes: ['pii', 'phi', 'financial', 'confidential'] },
-      },
-      { org: apiOrg('active') },
-      { orgs: [{ org: apiOrg('active'), membership: apiMember('owner') }] },
-    ]);
-
-    const req = makeReq({ body: { name: 'Acme Health' } });
+  it('loads organization context entirely from stara-api and only mirrors active tenantId', async () => {
+    mockContext();
     const res = makeRes();
 
-    await createOrganizationController(req, res);
+    await getOrganizationsContextController(makeReq(), res);
 
-    expect(fetch).toHaveBeenCalledWith(
-      'http://stara-api:3081/v1/orgs',
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      'http://stara-api:3081/v1/orgs/access-options',
       expect.objectContaining({
-        method: 'POST',
         headers: expect.objectContaining({
-          'x-stara-user-id': 'user_owner',
+          'x-stara-identity-subject': 'librechat:user_owner',
           'x-stara-actor-email': 'maya@example.com',
           'x-stara-email-verified': 'true',
           'x-stara-mfa-enrolled': 'true',
         }),
-        body: JSON.stringify({ name: 'Acme Health' }),
       }),
     );
-    expect(db.createTenant).toHaveBeenCalledWith(
+    expect(fetch.mock.calls[0][1].headers).not.toHaveProperty('x-stara-user-id');
+    expect(db.updateUser).toHaveBeenCalledWith('user_owner', {
+      tenantId: 'tenant_acme-health',
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0]).toMatchObject({
+      activeOrg: { tenantId: 'tenant_acme-health', roleLabel: 'Owner' },
+      permissions: { canManageMembers: true, canManageTeams: true },
+      scopedAccess: { scopeIds: ['memory'], groupIds: ['team_ops'] },
+    });
+    expect(res.json.mock.calls[0][0].members[0]).toMatchObject({
+      userId: '11111111-1111-4111-8111-111111111111',
+      groupIds: ['team_ops'],
+    });
+  });
+
+  it('creates and activates an org without writing duplicate tenant or membership models', async () => {
+    mockFetchJson({ org: apiOrg('draft'), membership: apiMember('owner') });
+    mockFetchJson({ org: apiOrg('active'), active_tenant_id: 'tenant_acme-health' });
+    mockContext();
+    const res = makeRes();
+
+    await createOrganizationController(makeReq({ body: { name: 'Acme Health' } }), res);
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      'http://stara-api:3081/v1/orgs',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'Acme Health' }) }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      'http://stara-api:3081/v1/orgs/tenant_acme-health/activate',
       expect.objectContaining({
-        tenantId: 'tenant_acme-health',
-        name: 'Acme Health',
-        slug: 'acme-health',
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-stara-tenant-id': 'tenant_acme-health' }),
       }),
     );
-    expect(db.upsertTenantMembership).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 'user_owner',
-        tenantId: 'tenant_acme-health',
-        roleKey: 'owner',
-        source: 'stara',
-      }),
-    );
-    expect(db.updateUser).toHaveBeenCalledWith('user_owner', { tenantId: 'tenant_acme-health' });
+    expect(db.updateUser).toHaveBeenCalledWith('user_owner', {
+      tenantId: 'tenant_acme-health',
+    });
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
-  it('creates canonical stara-api invites and returns the existing UI fallback link shape', async () => {
-    db.findTenant.mockResolvedValue(apiOrgAsTenant());
-    db.findTenantMembership.mockResolvedValue(localMembership('owner'));
-    mockFetchJson([
-      {
-        invite: {
-          invite_id: 'invite_1',
-          tenant_id: 'tenant_acme-health',
-          email: 'lee@example.com',
-          role_key: 'member',
-          scope_ids: ['memory'],
-          status: 'pending',
-          expires_at: '2026-07-18T00:00:00.000Z',
-          created_at: '2026-07-11T00:00:00.000Z',
-        },
-        token: 'invite_token_000000000000000000000001',
-      },
-      { orgs: [{ org: apiOrg('active'), membership: apiMember('owner') }] },
-    ]);
-
-    const req = makeReq({
-      params: { tenantId: 'tenant_acme-health' },
-      body: { email: 'lee@example.com', roleKey: 'member', scopeIds: ['memory'] },
-      user: { tenantId: 'tenant_acme-health' },
+  it('creates canonical invites and keeps only the fallback delivery response in the UI layer', async () => {
+    db.getUserById.mockResolvedValue(makeUser({ tenantId: 'tenant_acme-health' }));
+    mockFetchJson({
+      invite: apiInvite(),
+      token: 'invite_token_000000000000000000000001',
     });
+    mockContext();
     const res = makeRes();
 
-    await createInviteController(req, res);
+    await createInviteController(
+      makeReq({
+        params: { tenantId: 'tenant_acme-health' },
+        body: { email: 'lee@example.com', roleKey: 'member', scopeIds: [] },
+        user: makeUser({ tenantId: 'tenant_acme-health' }),
+      }),
+      res,
+    );
 
-    expect(fetch).toHaveBeenCalledWith(
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
       'http://stara-api:3081/v1/orgs/tenant_acme-health/invites',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
           email: 'lee@example.com',
           role_key: 'member',
-          scope_ids: ['memory'],
+          scope_ids: [],
           expires_in_days: 7,
         }),
       }),
     );
     expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json.mock.calls[0][0]).toMatchObject({
+      invite: { id: '33333333-3333-4333-8333-333333333333', email: 'lee@example.com' },
+      delivery: { sent: false, reason: 'resend_not_configured' },
+    });
     expect(res.json.mock.calls[0][0].inviteLink).toContain('invite_token_000000000000000000000001');
   });
 
-  it('accepts stara-api invites and mirrors accepted membership locally', async () => {
-    mockFetchJson([
-      {
-        org: apiOrg('active'),
-        membership: {
-          ...apiMember('member'),
-          user_id: 'user_member',
-          email: 'lee@example.com',
-          display_name: 'Lee',
-        },
-        invite: { created_by_user_id: 'user_owner' },
-      },
-      {
-        orgs: [
-          { org: apiOrg('active'), membership: { ...apiMember('member'), user_id: 'user_member' } },
-        ],
-      },
-    ]);
-
-    const req = makeReq({
-      body: { token: 'invite_token_000000000000000000000001' },
-      user: {
-        _id: 'user_member',
-        id: 'user_member',
-        email: 'lee@example.com',
-        name: 'Lee',
-        emailVerified: true,
-        twoFactorEnabled: true,
-      },
+  it('accepts invitations through stara-api and mirrors only the selected tenant', async () => {
+    db.getUserById.mockResolvedValue(
+      makeUser({ _id: 'user_member', id: 'user_member', email: 'lee@example.com', name: 'Lee' }),
+    );
+    mockFetchJson({
+      org: apiOrg('active'),
+      active_tenant_id: 'tenant_acme-health',
+      membership: apiMember('member'),
     });
-    db.getUserById.mockResolvedValue({
-      ...req.user,
+    mockContext('member');
+    const res = makeRes();
+
+    await acceptInviteController(
+      makeReq({
+        body: { token: 'invite_token_000000000000000000000001' },
+        user: makeUser({
+          _id: 'user_member',
+          id: 'user_member',
+          email: 'lee@example.com',
+          name: 'Lee',
+        }),
+      }),
+      res,
+    );
+
+    expect(db.updateUser).toHaveBeenCalledWith('user_member', {
       tenantId: 'tenant_acme-health',
     });
-    db.listTenantMemberships.mockResolvedValue([localMembership('member', 'user_member')]);
-
-    const res = makeRes();
-    await acceptInviteController(req, res);
-
-    expect(fetch).toHaveBeenCalledWith(
-      'http://stara-api:3081/v1/orgs/invites/accept',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ token: 'invite_token_000000000000000000000001' }),
-      }),
-    );
-    expect(db.upsertTenantMembership).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 'user_member',
-        tenantId: 'tenant_acme-health',
-        roleKey: 'member',
-        source: 'stara',
-      }),
-    );
-    expect(db.updateUser).toHaveBeenCalledWith('user_member', { tenantId: 'tenant_acme-health' });
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('lets a regular member select an active organization through the canonical API', async () => {
+    db.getUserById.mockResolvedValue(
+      makeUser({ tenantId: 'tenant_previous', email: 'lee@example.com', name: 'Lee' }),
+    );
+    mockFetchJson({ org: apiOrg('active'), active_tenant_id: 'tenant_acme-health' });
+    mockContext('member');
+    const res = makeRes();
+
+    await activateOrganizationController(
+      makeReq({
+        params: { tenantId: 'tenant_acme-health' },
+        user: makeUser({ tenantId: 'tenant_previous', email: 'lee@example.com', name: 'Lee' }),
+      }),
+      res,
+    );
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      'http://stara-api:3081/v1/orgs/tenant_acme-health/activate',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(db.updateUser).toHaveBeenCalledWith('user_owner', {
+      tenantId: 'tenant_acme-health',
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('does not treat a legacy Mongo tenant as the canonical active organization', async () => {
+    db.getUserById.mockResolvedValue(makeUser({ tenantId: 'tenant_legacy' }));
+    mockFetchJson(accessOptions());
+    mockFetchJson({
+      active_tenant_id: null,
+      orgs: [{ org: apiOrg('active'), membership: apiMember('owner') }],
+    });
+    const res = makeRes();
+
+    await getOrganizationsContextController(makeReq(), res);
+
+    expect(db.updateUser).toHaveBeenCalledWith('user_owner', { tenantId: null });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(res.json.mock.calls[0][0]).toMatchObject({
+      activeOrg: null,
+      members: [],
+      teams: [],
+      scopedAccess: { tenantId: null },
+    });
+  });
+
+  it('fails closed when stara-api is not configured', async () => {
+    delete process.env.STARA_API_URL;
+    const res = makeRes();
+
+    await getOrganizationsContextController(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 
-function seedContextMocks() {
-  db.getUserById.mockResolvedValue(makeUser());
-  db.findTenant.mockResolvedValue(null);
-  db.listTenants.mockResolvedValue([apiOrgAsTenant()]);
-  db.findTenantMembership.mockResolvedValue(localMembership('owner'));
-  db.listTenantMemberships.mockResolvedValue([localMembership('owner')]);
+function mockContext(roleKey = 'owner') {
+  mockFetchJson(accessOptions());
+  mockFetchJson({
+    active_tenant_id: 'tenant_acme-health',
+    orgs: [{ org: apiOrg('active'), membership: apiMember(roleKey) }],
+  });
+  mockFetchJson({ members: [apiMember(roleKey)] });
+  mockFetchJson({ teams: [apiTeam()] });
+  if (roleKey === 'owner' || roleKey === 'admin') {
+    mockFetchJson({ invites: [apiInvite()] });
+  }
 }
 
-function mockFetchJson(payloads) {
-  for (const payload of payloads) {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(payload),
-    });
-  }
+function mockFetchJson(payload, status = 200) {
+  fetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(payload),
+  });
 }
 
 function makeReq(overrides = {}) {
@@ -292,9 +281,34 @@ function makeUser(overrides = {}) {
     name: 'Maya',
     username: 'maya',
     tenantId: undefined,
+    idOnTheSource: undefined,
     emailVerified: true,
     twoFactorEnabled: true,
     ...overrides,
+  };
+}
+
+function accessOptions() {
+  return {
+    role_bundles: [
+      role('owner', 'Owner', true),
+      role('admin', 'Admin', true),
+      role('member', 'Member', false),
+      role('viewer', 'Viewer', false),
+    ],
+    scope_options: [
+      { id: 'memory', label: 'Memory', description: 'Tenant memory.' },
+      { id: 'agents', label: 'Agents', description: 'Tenant agents.' },
+    ],
+  };
+}
+
+function role(key, label, canManage) {
+  return {
+    key,
+    label,
+    description: `${label} role`,
+    can_manage_org: canManage,
   };
 }
 
@@ -304,26 +318,17 @@ function apiOrg(status = 'active') {
     slug: 'acme-health',
     name: 'Acme Health',
     status,
-    created_by_user_id: 'user_owner',
+    created_by_user_id: '11111111-1111-4111-8111-111111111111',
     created_at: '2026-07-11T00:00:00.000Z',
-  };
-}
-
-function apiOrgAsTenant() {
-  return {
-    tenantId: 'tenant_acme-health',
-    slug: 'acme-health',
-    name: 'Acme Health',
-    status: 'active',
   };
 }
 
 function apiMember(roleKey = 'owner') {
   return {
     tenant_id: 'tenant_acme-health',
-    user_id: 'user_owner',
-    email: 'maya@example.com',
-    display_name: 'Maya',
+    user_id: '11111111-1111-4111-8111-111111111111',
+    email: roleKey === 'member' ? 'lee@example.com' : 'maya@example.com',
+    display_name: roleKey === 'member' ? 'Lee' : 'Maya',
     role_key: roleKey,
     scope_ids: ['memory'],
     status: 'active',
@@ -332,19 +337,29 @@ function apiMember(roleKey = 'owner') {
   };
 }
 
-function localMembership(roleKey = 'owner', userId = 'user_owner') {
+function apiTeam() {
   return {
-    _id: `membership_${userId}`,
-    userId,
-    tenantId: 'tenant_acme-health',
-    orgName: 'Acme Health',
-    roleKey,
-    roleLabel: roleKey === 'owner' ? 'Owner' : 'Member',
+    team_id: 'team_ops',
+    tenant_id: 'tenant_acme-health',
+    name: 'Operations',
+    description: 'Customer operations',
+    member_ids: ['11111111-1111-4111-8111-111111111111'],
     status: 'active',
-    isDefault: true,
-    source: 'stara',
-    scopeIds: ['memory'],
-    groupIds: [],
+    created_at: '2026-07-11T00:00:00.000Z',
+    updated_at: '2026-07-11T00:00:00.000Z',
+  };
+}
+
+function apiInvite() {
+  return {
+    invite_id: '33333333-3333-4333-8333-333333333333',
+    tenant_id: 'tenant_acme-health',
+    email: 'lee@example.com',
+    role_key: 'member',
+    scope_ids: [],
+    status: 'pending',
+    created_at: '2026-07-11T00:00:00.000Z',
+    expires_at: '2026-07-18T00:00:00.000Z',
   };
 }
 
