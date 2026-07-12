@@ -116,7 +116,6 @@ export enum MutationKeys {
   deleteAgentAction = 'deleteAgentAction',
   revertAgentVersion = 'revertAgentVersion',
   saveStaraOnboarding = 'saveStaraOnboarding',
-  acceptStaraTenantInvite = 'acceptStaraTenantInvite',
   activateStaraTenant = 'activateStaraTenant',
   createStaraOrganization = 'createStaraOrganization',
   activateStaraOrganization = 'activateStaraOrganization',

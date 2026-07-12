@@ -69,10 +69,6 @@ export function saveStaraOnboarding(
   return request.put(endpoints.staraOnboarding(), payload);
 }
 
-export function acceptStaraTenantInvite(inviteId: string): Promise<t.TStaraOnboardingContext> {
-  return request.post(endpoints.staraTenantInviteAccept(inviteId));
-}
-
 export function activateStaraTenant(tenantId: string): Promise<t.TStaraOnboardingContext> {
   return request.post(endpoints.staraTenantActivate(tenantId));
 }

@@ -19,7 +19,6 @@ import type { TStaraOnboardingContext, TStaraTenantMembership } from 'librechat-
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
-  useAcceptStaraTenantInviteMutation,
   useActivateStaraTenantMutation,
   useSaveStaraOnboardingMutation,
   useStaraOnboardingContextQuery,
@@ -187,16 +186,12 @@ export default function StaraOnboardingView() {
   const saveMutation = useSaveStaraOnboardingMutation({
     onSuccess: (data) => setLatestContext(data),
   });
-  const acceptInviteMutation = useAcceptStaraTenantInviteMutation({
-    onSuccess: (data) => setLatestContext(data),
-  });
   const activateTenantMutation = useActivateStaraTenantMutation({
     onSuccess: (data) => setLatestContext(data),
   });
 
   const context = latestContext ?? query.data ?? null;
-  const isBusy =
-    saveMutation.isLoading || acceptInviteMutation.isLoading || activateTenantMutation.isLoading;
+  const isBusy = saveMutation.isLoading || activateTenantMutation.isLoading;
 
   useEffect(() => {
     if (!context || initialized.current) {
@@ -272,23 +267,6 @@ export default function StaraOnboardingView() {
         businessPath: 'join',
         selectedTenantId: membership.tenantId,
         orgName: membership.orgName,
-      },
-    });
-    setLatestContext(saved);
-    setPhase('tenantAddendum');
-  };
-
-  const handleInviteAcceptance = async (inviteId: string) => {
-    const accepted = await acceptInviteMutation.mutateAsync(inviteId);
-    const saved = await saveMutation.mutateAsync({
-      mode: 'business_join',
-      recommendedStart: 'memory',
-      readinessScore: getReadinessScore(choices, accepted),
-      responses: {
-        ...choices,
-        businessPath: 'join',
-        acceptedInviteId: inviteId,
-        activeTenantId: accepted.activeMembership?.tenantId,
       },
     });
     setLatestContext(saved);
@@ -485,7 +463,6 @@ export default function StaraOnboardingView() {
                   busy={isBusy}
                   onBack={() => setPhase('businessPath')}
                   onSelectMembership={handleMembershipSelection}
-                  onAcceptInvite={handleInviteAcceptance}
                   onPending={() => finishAccount('business_join_pending', 'chat')}
                 />
               ) : null}
@@ -712,26 +689,23 @@ function BusinessJoinStep({
   busy,
   onBack,
   onSelectMembership,
-  onAcceptInvite,
   onPending,
 }: {
   context: TStaraOnboardingContext | null;
   busy: boolean;
   onBack: () => void;
   onSelectMembership: (membership: TStaraTenantMembership) => void;
-  onAcceptInvite: (inviteId: string) => void;
   onPending: () => void;
 }) {
   const memberships =
     context?.memberships.filter((membership) => membership.status === 'active') ?? [];
-  const invites = context?.pendingInvites ?? [];
   const localize = useLocalize();
 
   return (
     <StepPanel
       eyebrow="Join an org"
-      title="Choose an existing org or accept an invite"
-      description="Stara only shows memberships and invites resolved by the server. If nothing is available, personal use stays unblocked."
+      title="Choose an existing org"
+      description="Use the secure link in your invitation email to accept new access. Existing memberships appear here after verification."
       footer={<StepActions back={onBack} busy={busy} />}
     >
       <div className="grid gap-5">
@@ -764,37 +738,7 @@ function BusinessJoinStep({
           </div>
         ) : null}
 
-        {invites.length > 0 ? (
-          <div>
-            <h3 className="text-sm font-semibold text-text-primary">
-              {localize('com_ui_stara_onboarding_pending_invites')}
-            </h3>
-            <div className="mt-3 grid gap-3">
-              {invites.map((invite) => (
-                <button
-                  key={invite.id}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onAcceptInvite(invite.id)}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border-light bg-surface-secondary p-4 text-left transition-colors hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  <span>
-                    <span className="block text-sm font-semibold text-text-primary">
-                      {invite.orgName}
-                    </span>
-                    <span className="mt-1 block text-sm text-text-secondary">
-                      {invite.roleLabel}
-                      {invite.invitedByName ? ` - invited by ${invite.invitedByName}` : ''}
-                    </span>
-                  </span>
-                  <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {memberships.length === 0 && invites.length === 0 ? (
+        {memberships.length === 0 ? (
           <div className="rounded-lg border border-border-light bg-surface-secondary p-4">
             <div className="flex items-start gap-3">
               <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-text-secondary" />

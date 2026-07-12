@@ -396,7 +396,7 @@ export type TUpsertStaraOrgTeamRequest = {
 export type TStaraAccessGroup = {
   id: string;
   name: string;
-  source: 'local' | 'entra';
+  source: 'stara' | 'entra';
   idOnTheSource?: string | null;
   description?: string;
 };
