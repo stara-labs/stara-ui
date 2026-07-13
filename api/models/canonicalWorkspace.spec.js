@@ -9,6 +9,11 @@ jest.mock('@librechat/data-schemas', () => ({
   logger: { debug: jest.fn(), error: jest.fn(), info: jest.fn(), warn: jest.fn() },
 }));
 
+const mockGetCanonicalRequestUser = jest.fn();
+jest.mock('~/server/services/StaraApiClient', () => ({
+  getCanonicalRequestUser: (...args) => mockGetCanonicalRequestUser(...args),
+}));
+
 const { callStaraApi } = require('~/server/services/StaraServiceClient');
 const { createCanonicalWorkspaceMethods } = require('./canonicalWorkspace');
 
@@ -24,6 +29,7 @@ describe('canonical workspace model adapter', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.STARA_CANONICAL_WORKSPACE = 'true';
+    mockGetCanonicalRequestUser.mockReturnValue(baseUser());
   });
 
   afterAll(() => restoreEnv('STARA_CANONICAL_WORKSPACE', originalEnabled));
@@ -104,6 +110,7 @@ describe('canonical workspace model adapter', () => {
         { type: 'tool_call', name: 'check_policy', arguments: { scope: 'finance' } },
       ],
     });
+    expect(mockGetCanonicalRequestUser).toHaveBeenCalledWith(USER_ID);
   });
 
   it('amends an existing canonical message instead of writing a Mongo copy', async () => {
@@ -289,17 +296,21 @@ describe('canonical workspace model adapter', () => {
 
 function baseMethods() {
   return {
-    getUserById: jest.fn().mockResolvedValue({
-      _id: USER_ID,
-      id: USER_ID,
-      email: 'maya@example.com',
-      name: 'Maya',
-      tenantId: TENANT_ID,
-      idOnTheSource: 'fixture:user_maya',
-      emailVerified: true,
-      twoFactorEnabled: true,
-    }),
+    getUserById: jest.fn(),
     saveMessage: jest.fn(),
+  };
+}
+
+function baseUser() {
+  return {
+    _id: USER_ID,
+    id: USER_ID,
+    email: 'maya@example.com',
+    name: 'Maya',
+    tenantId: TENANT_ID,
+    idOnTheSource: 'fixture:user_maya',
+    emailVerified: true,
+    twoFactorEnabled: true,
   };
 }
 

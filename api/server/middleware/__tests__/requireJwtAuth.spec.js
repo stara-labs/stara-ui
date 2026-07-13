@@ -14,6 +14,9 @@ const jwt = require('jsonwebtoken');
 
 let mockPassportError = null;
 let mockRegisteredStrategies = new Set(['jwt']);
+let mockCanonicalIdentityEnabled = false;
+const mockResolveCanonicalRequestUser = jest.fn(async (user) => user);
+const mockRunWithCanonicalRequestUser = jest.fn((_user, callback) => callback());
 
 jest.mock('passport', () => ({
   _strategy: jest.fn((strategy) => (mockRegisteredStrategies.has(strategy) ? {} : undefined)),
@@ -34,6 +37,12 @@ jest.mock('passport', () => ({
       return callback(null, req._mockUser ?? false, { message: 'Unauthorized' }, 401);
     };
   }),
+}));
+
+jest.mock('~/server/services/StaraApiClient', () => ({
+  isCanonicalIdentityContextEnabled: () => mockCanonicalIdentityEnabled,
+  resolveCanonicalRequestUser: (...args) => mockResolveCanonicalRequestUser(...args),
+  runWithCanonicalRequestUser: (...args) => mockRunWithCanonicalRequestUser(...args),
 }));
 
 jest.mock('@librechat/data-schemas', () => {
@@ -286,6 +295,10 @@ describe('requireJwtAuth tenant context chaining', () => {
   afterEach(() => {
     mockPassportError = null;
     mockRegisteredStrategies = new Set(['jwt']);
+    mockCanonicalIdentityEnabled = false;
+    mockResolveCanonicalRequestUser.mockReset();
+    mockResolveCanonicalRequestUser.mockImplementation(async (user) => user);
+    mockRunWithCanonicalRequestUser.mockClear();
     isEnabled.mockReturnValue(false);
     maybeRefreshCloudFrontAuthCookiesMiddleware.mockClear();
     logger.debug.mockClear();
@@ -317,6 +330,37 @@ describe('requireJwtAuth tenant context chaining', () => {
   it('sets ALS tenant context after passport auth succeeds', async () => {
     const tenantId = await runAuth({ tenantId: 'tenant-abc', role: 'user' });
     expect(tenantId).toBe('tenant-abc');
+  });
+
+  it('resolves canonical active tenancy before establishing ALS context', async () => {
+    mockCanonicalIdentityEnabled = true;
+    mockResolveCanonicalRequestUser.mockImplementationOnce(async (user) => {
+      user.tenantId = 'tenant-canonical';
+      return user;
+    });
+    const tenantId = await runAuth({ id: 'user-123', tenantId: 'tenant-stale', role: 'user' });
+
+    expect(mockResolveCanonicalRequestUser).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-123', tenantId: 'tenant-canonical' }),
+    );
+    expect(tenantId).toBe('tenant-canonical');
+    expect(mockRunWithCanonicalRequestUser).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-123', tenantId: 'tenant-canonical' }),
+      expect.any(Function),
+    );
+  });
+
+  it('fails closed before tenant middleware when canonical account resolution fails', async () => {
+    mockCanonicalIdentityEnabled = true;
+    const failure = Object.assign(new Error('Canonical account unavailable'), { status: 503 });
+    mockResolveCanonicalRequestUser.mockRejectedValueOnce(failure);
+    const req = mockReq({ id: 'user-123', tenantId: 'tenant-stale', role: 'user' });
+    const res = mockRes();
+
+    const error = await new Promise((resolve) => requireJwtAuth(req, res, resolve));
+
+    expect(error).toBe(failure);
+    expect(maybeRefreshCloudFrontAuthCookiesMiddleware).not.toHaveBeenCalled();
   });
 
   it('refreshes CloudFront auth cookies after passport auth succeeds', () => {

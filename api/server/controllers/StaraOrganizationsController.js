@@ -2,10 +2,9 @@ const fetch = require('node-fetch');
 const { logger } = require('@librechat/data-schemas');
 const {
   callStaraApi,
-  loadStaraUser,
   normalizeEmail,
+  requireStaraUser,
   safeString,
-  setCompatibilityTenant,
 } = require('~/server/services/StaraApiClient');
 
 const MAX_NAME_LENGTH = 120;
@@ -105,7 +104,7 @@ const mapInvite = (invite, roleMap) => {
 };
 
 const buildOrganizationsContext = async (inputUser) => {
-  const user = await loadStaraUser(inputUser);
+  const user = requireStaraUser(inputUser);
   const accessOptions = await callStaraApi(user, '/v1/orgs/access-options');
   const roles = roleCatalog(accessOptions);
   const roleMap = roleMapFrom(roles);
@@ -117,7 +116,6 @@ const buildOrganizationsContext = async (inputUser) => {
   const activeEntry =
     entries.find((entry) => entry.org.tenant_id === canonicalActiveTenantId) ?? null;
   const activeTenantId = activeEntry?.org?.tenant_id ?? null;
-  await setCompatibilityTenant(user, activeTenantId);
 
   let teams = [];
   let members = [];
@@ -257,21 +255,16 @@ const createOrganizationController = async (req, res) => {
     if (!name || name.length < 2) {
       return res.status(400).json({ message: 'Org name must be at least 2 characters' });
     }
-    const user = await loadStaraUser(req.user);
+    const user = requireStaraUser(req.user);
     const created = await callStaraApi(user, '/v1/orgs', {
       method: 'POST',
       body: { name },
     });
     const tenantId = created.org.tenant_id;
-    const activated = await callStaraApi(
-      user,
-      `/v1/orgs/${encodeURIComponent(tenantId)}/activate`,
-      {
-        method: 'POST',
-        tenantId,
-      },
-    );
-    await setCompatibilityTenant(user, activated.active_tenant_id);
+    await callStaraApi(user, `/v1/orgs/${encodeURIComponent(tenantId)}/activate`, {
+      method: 'POST',
+      tenantId,
+    });
     return res.status(201).json(await buildOrganizationsContext(user));
   } catch (error) {
     return respondWithError(res, 'Failed to create org', error);
@@ -281,16 +274,11 @@ const createOrganizationController = async (req, res) => {
 const activateOrganizationController = async (req, res) => {
   try {
     const tenantId = safeString(req.params.tenantId);
-    const user = await loadStaraUser(req.user);
-    const activated = await callStaraApi(
-      user,
-      `/v1/orgs/${encodeURIComponent(tenantId)}/activate`,
-      {
-        method: 'POST',
-        tenantId,
-      },
-    );
-    await setCompatibilityTenant(user, activated.active_tenant_id);
+    const user = requireStaraUser(req.user);
+    await callStaraApi(user, `/v1/orgs/${encodeURIComponent(tenantId)}/activate`, {
+      method: 'POST',
+      tenantId,
+    });
     return res.status(200).json(await buildOrganizationsContext(user));
   } catch (error) {
     return respondWithError(res, 'Failed to activate org', error);
@@ -310,7 +298,7 @@ const updateMemberController = async (req, res) => {
   try {
     const tenantId = safeString(req.params.tenantId);
     const userId = safeString(req.params.userId);
-    const user = await loadStaraUser(req.user);
+    const user = requireStaraUser(req.user);
     const body = {};
     if (req.body?.roleKey !== undefined) {
       body.role_key = normalizeRoleKey(req.body.roleKey);
@@ -344,7 +332,7 @@ const createInviteController = async (req, res) => {
     if (!email || !email.includes('@')) {
       return res.status(400).json({ message: 'A valid email is required' });
     }
-    const user = await loadStaraUser(req.user);
+    const user = requireStaraUser(req.user);
     const response = await callStaraApi(user, `/v1/orgs/${encodeURIComponent(tenantId)}/invites`, {
       method: 'POST',
       tenantId,
@@ -390,12 +378,11 @@ const acceptInviteController = async (req, res) => {
     if (!token) {
       return res.status(400).json({ message: 'Invite token is required' });
     }
-    const user = await loadStaraUser(req.user);
-    const accepted = await callStaraApi(user, '/v1/orgs/invites/accept', {
+    const user = requireStaraUser(req.user);
+    await callStaraApi(user, '/v1/orgs/invites/accept', {
       method: 'POST',
       body: { token },
     });
-    await setCompatibilityTenant(user, accepted.active_tenant_id);
     return res.status(200).json(await buildOrganizationsContext(user));
   } catch (error) {
     return respondWithError(res, 'Failed to accept invite', error);
@@ -406,7 +393,7 @@ const revokeInviteController = async (req, res) => {
   try {
     const tenantId = safeString(req.params.tenantId);
     const inviteId = safeString(req.params.inviteId);
-    const user = await loadStaraUser(req.user);
+    const user = requireStaraUser(req.user);
     await callStaraApi(
       user,
       `/v1/orgs/${encodeURIComponent(tenantId)}/invites/${encodeURIComponent(inviteId)}`,
@@ -425,7 +412,7 @@ const createTeamController = async (req, res) => {
     if (!name) {
       return res.status(400).json({ message: 'Team name is required' });
     }
-    const user = await loadStaraUser(req.user);
+    const user = requireStaraUser(req.user);
     await callStaraApi(user, `/v1/orgs/${encodeURIComponent(tenantId)}/teams`, {
       method: 'POST',
       tenantId,
@@ -445,7 +432,7 @@ const updateTeamController = async (req, res) => {
   try {
     const tenantId = safeString(req.params.tenantId);
     const teamId = safeString(req.params.teamId);
-    const user = await loadStaraUser(req.user);
+    const user = requireStaraUser(req.user);
     const body = {};
     if (req.body?.name !== undefined) {
       body.name = safeString(req.body.name, undefined, MAX_NAME_LENGTH);
@@ -471,7 +458,7 @@ const deleteTeamController = async (req, res) => {
   try {
     const tenantId = safeString(req.params.tenantId);
     const teamId = safeString(req.params.teamId);
-    const user = await loadStaraUser(req.user);
+    const user = requireStaraUser(req.user);
     await callStaraApi(
       user,
       `/v1/orgs/${encodeURIComponent(tenantId)}/teams/${encodeURIComponent(teamId)}`,

@@ -9,6 +9,11 @@ jest.mock('~/server/services/StaraServiceClient', () => ({
     typeof value === 'string' && value.trim() ? value.trim().slice(0, maxLength) : fallback,
 }));
 
+const mockGetCanonicalRequestUser = jest.fn();
+jest.mock('~/server/services/StaraApiClient', () => ({
+  getCanonicalRequestUser: (...args) => mockGetCanonicalRequestUser(...args),
+}));
+
 const { PermissionBits } = require('librechat-data-provider');
 const { callStaraApi } = require('~/server/services/StaraServiceClient');
 const {
@@ -30,6 +35,7 @@ describe('canonical agent model adapter', () => {
     jest.clearAllMocks();
     process.env.STARA_CANONICAL_AGENTS = 'true';
     process.env.STARA_CANONICAL_WORKSPACE = 'true';
+    mockGetCanonicalRequestUser.mockReturnValue(baseUser());
   });
 
   afterAll(() => {
@@ -101,6 +107,8 @@ describe('canonical agent model adapter', () => {
       version: 1,
     });
     expect(legacy.createAgent).not.toHaveBeenCalled();
+    expect(legacy.getUserById).not.toHaveBeenCalled();
+    expect(mockGetCanonicalRequestUser).toHaveBeenCalledWith('user_maya');
   });
 
   it('merges partial edits and restores history as a new canonical version', async () => {
@@ -201,17 +209,21 @@ describe('canonical agent model adapter', () => {
 
 function baseMethods() {
   return {
-    getUserById: jest.fn().mockResolvedValue({
-      _id: 'user_maya',
-      id: 'user_maya',
-      email: 'maya@example.com',
-      name: 'Maya',
-      tenantId: 'tenant_acme',
-      idOnTheSource: 'fixture:user_maya',
-      emailVerified: true,
-      twoFactorEnabled: true,
-    }),
+    getUserById: jest.fn(),
     createAgent: jest.fn(),
+  };
+}
+
+function baseUser() {
+  return {
+    _id: 'user_maya',
+    id: 'user_maya',
+    email: 'maya@example.com',
+    name: 'Maya',
+    tenantId: 'tenant_acme',
+    idOnTheSource: 'fixture:user_maya',
+    emailVerified: true,
+    twoFactorEnabled: true,
   };
 }
 

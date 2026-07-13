@@ -13,6 +13,7 @@ jest.mock('passport-jwt', () => ({
 
 jest.mock('@librechat/data-schemas', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() },
+  runAsSystem: jest.fn((callback) => callback()),
 }));
 
 jest.mock('~/models', () => ({
@@ -21,6 +22,7 @@ jest.mock('~/models', () => ({
 }));
 
 const jwtLogin = require('./jwtStrategy');
+const { runAsSystem } = require('@librechat/data-schemas');
 const { getUserById, updateUser } = require('~/models');
 
 function invokeVerify(payload) {
@@ -51,6 +53,8 @@ describe('jwtStrategy', () => {
 
     expect(user.id).toBe('user-1');
     expect(user.idOnTheSource).toBeNull();
+    expect(runAsSystem).toHaveBeenCalledTimes(1);
+    expect(getUserById).toHaveBeenCalledWith('user-1', '-password -__v -totpSecret -backupCodes');
   });
 
   it('preserves a stored idOnTheSource for federated users', async () => {
@@ -71,5 +75,15 @@ describe('jwtStrategy', () => {
     const { user } = await invokeVerify({ id: 'missing' });
 
     expect(user).toBe(false);
+  });
+
+  it('repairs a missing compatibility role outside tenant isolation', async () => {
+    getUserById.mockResolvedValue({ _id: { toString: () => 'user-3' } });
+
+    const { user } = await invokeVerify({ id: 'user-3' });
+
+    expect(user.role).toBe(SystemRoles.USER);
+    expect(updateUser).toHaveBeenCalledWith('user-3', { role: SystemRoles.USER });
+    expect(runAsSystem).toHaveBeenCalledTimes(2);
   });
 });

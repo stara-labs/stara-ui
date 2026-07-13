@@ -12,6 +12,11 @@ const {
   maybeRefreshCloudFrontAuthCookiesMiddleware,
   recordRumProxyRequest,
 } = require('@librechat/api');
+const {
+  isCanonicalIdentityContextEnabled,
+  resolveCanonicalRequestUser,
+  runWithCanonicalRequestUser,
+} = require('~/server/services/StaraApiClient');
 
 const hasPassportStrategy = (strategy) =>
   typeof passport._strategy === 'function' && passport._strategy(strategy) != null;
@@ -180,15 +185,28 @@ const requireJwtAuth = (req, res, next) => {
         logAuthenticationFailure({ strategy, info, status: 401, err });
         return res.status(401).json({ message: 'Unauthorized' });
       }
-      req.user = user;
-      req.authStrategy = strategy;
-      logFallbackSuccess(strategy);
-      tenantContextMiddleware(req, res, (tenantErr) => {
-        if (tenantErr) {
-          return next(tenantErr);
-        }
-        refreshCloudFrontCookies(req, res, next);
-      });
+      const finishAuthentication = (resolvedUser, canonicalIdentity = false) => {
+        const continueAuthentication = () => {
+          req.user = resolvedUser;
+          req.authStrategy = strategy;
+          logFallbackSuccess(strategy);
+          tenantContextMiddleware(req, res, (tenantErr) => {
+            if (tenantErr) {
+              return next(tenantErr);
+            }
+            refreshCloudFrontCookies(req, res, next);
+          });
+        };
+        return canonicalIdentity
+          ? runWithCanonicalRequestUser(resolvedUser, continueAuthentication)
+          : continueAuthentication();
+      };
+      if (!isCanonicalIdentityContextEnabled()) {
+        return finishAuthentication(user);
+      }
+      resolveCanonicalRequestUser(user)
+        .then((resolvedUser) => finishAuthentication(resolvedUser, true))
+        .catch(next);
     })(req, res, next);
   };
 

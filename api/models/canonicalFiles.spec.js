@@ -4,6 +4,11 @@ jest.mock('~/server/services/CanonicalFileService', () => ({
   listCanonicalFiles: jest.fn(),
 }));
 
+const mockGetCanonicalRequestUser = jest.fn();
+jest.mock('~/server/services/StaraApiClient', () => ({
+  getCanonicalRequestUser: (...args) => mockGetCanonicalRequestUser(...args),
+}));
+
 const { getUserId } = require('@librechat/data-schemas');
 const {
   canonicalFilesEnabled,
@@ -28,12 +33,7 @@ describe('canonical file model adapter', () => {
     updatedAt: '2026-07-12T00:00:00.000Z',
   };
   const baseMethods = {
-    getUserById: jest.fn().mockResolvedValue({
-      _id: 'user-1',
-      id: 'user-1',
-      tenantId: 'tenant_acme',
-      email: 'maya@example.com',
-    }),
+    getUserById: jest.fn(),
     getFiles: jest.fn().mockResolvedValue([legacy]),
     findFileById: jest.fn(),
   };
@@ -44,7 +44,7 @@ describe('canonical file model adapter', () => {
     getUserId.mockReturnValue('user-1');
     canonicalFilesEnabled.mockReturnValue(true);
     listCanonicalFiles.mockResolvedValue([canonical]);
-    baseMethods.getUserById.mockResolvedValue({
+    mockGetCanonicalRequestUser.mockReturnValue({
       _id: 'user-1',
       id: 'user-1',
       tenantId: 'tenant_acme',
@@ -63,6 +63,8 @@ describe('canonical file model adapter', () => {
 
     await expect(methods.getFiles({ user: 'user-1' })).resolves.toEqual([canonical, legacy]);
     expect(listCanonicalFiles).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
+    expect(mockGetCanonicalRequestUser).toHaveBeenCalledWith('user-1');
+    expect(baseMethods.getUserById).not.toHaveBeenCalled();
     await expect(methods.findFileById(canonical.file_id)).resolves.toEqual(canonical);
   });
 

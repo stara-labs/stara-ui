@@ -10,6 +10,11 @@ jest.mock('~/server/services/StaraServiceClient', () => ({
     typeof value === 'string' && value.trim() ? value.trim().slice(0, maxLength) : fallback,
 }));
 
+const mockGetCanonicalRequestUser = jest.fn();
+jest.mock('~/server/services/StaraApiClient', () => ({
+  getCanonicalRequestUser: (...args) => mockGetCanonicalRequestUser(...args),
+}));
+
 const { PermissionBits } = require('librechat-data-provider');
 const { callStaraApi } = require('~/server/services/StaraServiceClient');
 const {
@@ -32,6 +37,7 @@ describe('canonical skill model adapter', () => {
     jest.clearAllMocks();
     process.env.STARA_CANONICAL_SKILLS = 'true';
     process.env.STARA_CANONICAL_WORKSPACE = 'true';
+    mockGetCanonicalRequestUser.mockReturnValue(baseUser());
   });
 
   afterAll(() => {
@@ -92,6 +98,7 @@ describe('canonical skill model adapter', () => {
       fileCount: 0,
     });
     expect(result.warnings).toEqual([]);
+    expect(mockGetCanonicalRequestUser).toHaveBeenCalledWith('user_maya');
   });
 
   it('returns the authoritative skill on an optimistic version conflict', async () => {
@@ -206,7 +213,7 @@ describe('canonical skill model adapter', () => {
 
 function baseMethods() {
   return {
-    getUserById: jest.fn().mockResolvedValue(baseUser()),
+    getUserById: jest.fn(),
     getAgents: jest.fn().mockResolvedValue([]),
     updateAgent: jest.fn(),
   };

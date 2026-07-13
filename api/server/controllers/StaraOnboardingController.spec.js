@@ -6,12 +6,6 @@ jest.mock('@librechat/data-schemas', () => ({
   logger: { debug: jest.fn(), error: jest.fn(), warn: jest.fn(), info: jest.fn() },
 }));
 
-jest.mock('~/models', () => ({
-  getUserById: jest.fn(),
-  updateUser: jest.fn(),
-}));
-
-const db = require('~/models');
 const {
   acceptStaraTenantInviteController,
   activateStaraTenantController,
@@ -25,8 +19,6 @@ describe('StaraOnboardingController canonical API proxy', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.STARA_API_URL = 'http://stara-api:3081';
-    db.getUserById.mockResolvedValue(makeUser());
-    db.updateUser.mockResolvedValue(makeUser({ tenantId: 'tenant_acme' }));
   });
 
   afterAll(() => restoreEnv('STARA_API_URL', originalStaraApiUrl));
@@ -49,7 +41,6 @@ describe('StaraOnboardingController canonical API proxy', () => {
         }),
       }),
     );
-    expect(db.updateUser).toHaveBeenCalledWith('user_owner', { tenantId: 'tenant_acme' });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json.mock.calls[0][0]).toMatchObject({
       account: { completed: true, onboarding: { mode: 'business_join' } },
@@ -104,17 +95,13 @@ describe('StaraOnboardingController canonical API proxy', () => {
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
-  it('hides organization state and clears the compatibility tenant without assurance', async () => {
-    db.getUserById.mockResolvedValue(
-      makeUser({ tenantId: 'tenant_legacy', twoFactorEnabled: false }),
-    );
+  it('hides organization state without assurance and does not write compatibility state', async () => {
     mockFetchJson(accountResponse({ ready: false }));
     const res = makeRes();
 
     await getStaraOnboardingContextController(makeReq(), res);
 
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(db.updateUser).toHaveBeenCalledWith('user_owner', { tenantId: null });
     expect(res.json.mock.calls[0][0]).toMatchObject({
       memberships: [],
       activeMembership: null,

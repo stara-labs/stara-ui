@@ -1,10 +1,5 @@
 const { logger } = require('@librechat/data-schemas');
-const {
-  callStaraApi,
-  loadStaraUser,
-  safeString,
-  setCompatibilityTenant,
-} = require('~/server/services/StaraApiClient');
+const { callStaraApi, requireStaraUser, safeString } = require('~/server/services/StaraApiClient');
 
 const STARA_ONBOARDING_VERSION = 1;
 const MAX_RESPONSE_STRING_LENGTH = 512;
@@ -120,7 +115,7 @@ const mapTeam = (team) => ({
 });
 
 const buildContext = async (inputUser) => {
-  const user = await loadStaraUser(inputUser);
+  const user = requireStaraUser(inputUser);
   const account = await callStaraApi(user, '/v1/identity/sync', {
     method: 'POST',
     body: { display_name: safeString(user.name ?? user.username ?? user.email, 'Stara user') },
@@ -159,7 +154,6 @@ const buildContext = async (inputUser) => {
     memberships = entries.map((entry) => mapMembership({ entry, roleMap, activeTenantId, teams }));
   }
 
-  await setCompatibilityTenant(user, activeTenantId);
   const activeMembership =
     memberships.find((membership) => membership.tenantId === activeTenantId) ?? null;
   const accountCompleted = Boolean(onboarding.account?.completedAt);
@@ -213,7 +207,7 @@ const saveStaraOnboardingController = async (req, res) => {
     const recommendedStart = ALLOWED_STARTS.has(req.body?.recommendedStart)
       ? req.body.recommendedStart
       : 'chat';
-    const user = await loadStaraUser(req.user);
+    const user = requireStaraUser(req.user);
     await callStaraApi(user, '/v1/me/onboarding', {
       method: 'PUT',
       body: {
@@ -243,13 +237,11 @@ const activateStaraTenantController = async (req, res) => {
     if (!tenantId) {
       return res.status(400).json({ message: 'tenantId is required' });
     }
-    const user = await loadStaraUser(req.user);
-    const activated = await callStaraApi(
-      user,
-      `/v1/orgs/${encodeURIComponent(tenantId)}/activate`,
-      { method: 'POST', tenantId },
-    );
-    await setCompatibilityTenant(user, activated.active_tenant_id);
+    const user = requireStaraUser(req.user);
+    await callStaraApi(user, `/v1/orgs/${encodeURIComponent(tenantId)}/activate`, {
+      method: 'POST',
+      tenantId,
+    });
     return res.status(200).json(await buildContext(user));
   } catch (error) {
     return respondWithError(res, 'Failed to activate tenant', error);

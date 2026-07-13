@@ -1,6 +1,7 @@
 const { getUserId: getContextUserId } = require('@librechat/data-schemas');
 const { PermissionBits } = require('librechat-data-provider');
 const { callStaraApi, getUserId, safeString } = require('~/server/services/StaraServiceClient');
+const { getCanonicalRequestUser } = require('~/server/services/StaraApiClient');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
@@ -29,14 +30,13 @@ const canonicalAgentsEnabled = () => {
   );
 };
 
-const createCanonicalAgentMethods = (baseMethods) => {
+const createCanonicalAgentMethods = (_baseMethods) => {
   if (!canonicalAgentsEnabled()) {
     return {};
   }
 
   const withActor = async (callback) => {
-    // Mongo remains the auth profile directory; all agent state is loaded from Stara API.
-    const user = await loadCurrentUser(baseMethods);
+    const user = await loadCurrentUser();
     const me = await request(user, '/v1/me');
     return callback(user, me.user);
   };
@@ -262,23 +262,14 @@ const createCanonicalAgentMethods = (baseMethods) => {
   };
 };
 
-const loadCurrentUser = async (baseMethods) => {
+const loadCurrentUser = async () => {
   const userId = getContextUserId();
   if (!userId) {
     const error = new Error('User not authenticated');
     error.status = 401;
     throw error;
   }
-  const user = await baseMethods.getUserById(
-    userId,
-    '_id id email username name tenantId idOnTheSource emailVerified twoFactorEnabled',
-  );
-  if (!user) {
-    const error = new Error('Authenticated user was not found');
-    error.status = 401;
-    throw error;
-  }
-  return { ...user, id: user.id ?? user._id?.toString() ?? userId };
+  return getCanonicalRequestUser(userId);
 };
 
 const request = (user, path, options = {}) =>
