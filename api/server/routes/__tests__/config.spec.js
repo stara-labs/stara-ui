@@ -107,6 +107,13 @@ afterEach(() => {
   delete process.env.SAML_CERT;
   delete process.env.SAML_SESSION_SECRET;
   delete process.env.ALLOW_ACCOUNT_DELETION;
+  delete process.env.STARA_IDENTITY_PLATFORM_AUTH;
+  delete process.env.STARA_IDENTITY_PLATFORM_PROJECT_ID;
+  delete process.env.STARA_IDENTITY_PLATFORM_WEB_API_KEY;
+  delete process.env.STARA_IDENTITY_PLATFORM_AUTH_DOMAIN;
+  delete process.env.STARA_IDENTITY_PLATFORM_APP_ID;
+  delete process.env.STARA_IDENTITY_PLATFORM_TENANT_ID;
+  delete process.env.STARA_IDENTITY_PLATFORM_EMULATOR_URL;
   delete process.env.ANALYTICS_GTM_ID;
   delete process.env.CUSTOM_FOOTER;
   delete process.env.HELP_AND_FAQ_URL;
@@ -169,6 +176,39 @@ describe('GET /api/config', () => {
       expect(response.body).not.toHaveProperty('sharePointPickerGraphScope');
       expect(response.body).not.toHaveProperty('sharePointPickerSharePointScope');
       expect(response.body).not.toHaveProperty('conversationImportMaxFileSize');
+    });
+
+    it('publishes browser Identity Platform config and retires inherited login choices', async () => {
+      process.env.STARA_IDENTITY_PLATFORM_AUTH = 'true';
+      process.env.STARA_IDENTITY_PLATFORM_PROJECT_ID = 'stara-production';
+      process.env.STARA_IDENTITY_PLATFORM_WEB_API_KEY = 'public-browser-key';
+      process.env.STARA_IDENTITY_PLATFORM_TENANT_ID = 'workforce-tenant';
+      process.env.ALLOW_REGISTRATION = 'true';
+      process.env.ALLOW_SOCIAL_LOGIN = 'true';
+      process.env.ALLOW_PASSWORD_RESET = 'true';
+      process.env.GOOGLE_CLIENT_ID = 'legacy-google-id';
+      process.env.GOOGLE_CLIENT_SECRET = 'legacy-google-secret';
+      mockGetAppConfig.mockResolvedValue(baseAppConfig);
+
+      const response = await request(createApp(null)).get('/api/config');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.identityPlatform).toEqual({
+        enabled: true,
+        apiKey: 'public-browser-key',
+        projectId: 'stara-production',
+        authDomain: 'stara-production.firebaseapp.com',
+        tenantId: 'workforce-tenant',
+      });
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          emailLoginEnabled: true,
+          registrationEnabled: false,
+          socialLoginEnabled: false,
+          passwordResetEnabled: false,
+          googleLoginEnabled: false,
+        }),
+      );
     });
 
     it('should strip authenticated-only informational fields from unauthenticated response (#12688)', async () => {

@@ -198,6 +198,19 @@ const getStaraOnboardingContextController = async (req, res) => {
   }
 };
 
+const syncStaraIdentityController = async (req, res) => {
+  try {
+    const user = requireStaraUser(req.user);
+    const account = await callStaraApi(user, '/v1/identity/sync', {
+      method: 'POST',
+      body: { display_name: safeString(user.name ?? user.username ?? user.email, 'Stara user') },
+    });
+    return res.status(200).json(account);
+  } catch (error) {
+    return respondWithError(res, 'Failed to synchronize identity', error);
+  }
+};
+
 const saveStaraOnboardingController = async (req, res) => {
   try {
     const mode = safeString(req.body?.mode);
@@ -250,6 +263,7 @@ const activateStaraTenantController = async (req, res) => {
 
 module.exports = {
   getStaraOnboardingContextController,
+  syncStaraIdentityController,
   saveStaraOnboardingController,
   acceptStaraTenantInviteController,
   activateStaraTenantController,

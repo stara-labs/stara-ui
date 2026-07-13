@@ -14,6 +14,34 @@ const identityPlatformProjectId = () =>
     128,
   );
 
+const identityPlatformWebConfig = () => {
+  if (!identityPlatformAuthEnabled()) {
+    return undefined;
+  }
+
+  const projectId = identityPlatformProjectId();
+  const apiKey = safeString(process.env.STARA_IDENTITY_PLATFORM_WEB_API_KEY, undefined, 512);
+  if (!projectId || !apiKey) {
+    const error = new Error('Identity Platform browser configuration is incomplete');
+    error.status = 503;
+    throw error;
+  }
+
+  return {
+    enabled: true,
+    apiKey,
+    projectId,
+    authDomain: safeString(
+      process.env.STARA_IDENTITY_PLATFORM_AUTH_DOMAIN,
+      `${projectId}.firebaseapp.com`,
+      512,
+    ),
+    tenantId: safeString(process.env.STARA_IDENTITY_PLATFORM_TENANT_ID, undefined, 128),
+    appId: safeString(process.env.STARA_IDENTITY_PLATFORM_APP_ID, undefined, 256),
+    emulatorUrl: safeString(process.env.STARA_IDENTITY_PLATFORM_EMULATOR_URL, undefined, 512),
+  };
+};
+
 const getIdentityPlatformAuth = () => {
   const { applicationDefault, getApps, initializeApp } = require('firebase-admin/app');
   const { getAuth } = require('firebase-admin/auth');
@@ -99,6 +127,7 @@ const verifyIdentityPlatformToken = async (rawToken) => {
 module.exports = {
   identityPlatformAuthEnabled,
   identityPlatformProjectId,
+  identityPlatformWebConfig,
   identityPlatformUser,
   verifyIdentityPlatformToken,
 };

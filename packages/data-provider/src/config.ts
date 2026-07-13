@@ -1485,11 +1485,22 @@ export type TRumConfig = {
 
 export type StartupConfigContext = 'share';
 
+export type TIdentityPlatformStartupConfig = {
+  enabled: true;
+  apiKey: string;
+  projectId: string;
+  authDomain: string;
+  tenantId?: string;
+  appId?: string;
+  emulatorUrl?: string;
+};
+
 export type TStartupConfig = {
   appTitle: string;
   socialLogins?: string[];
   interface?: TInterfaceConfig;
   turnstile?: TTurnstileConfig;
+  identityPlatform?: TIdentityPlatformStartupConfig;
   balance?: TBalanceConfig;
   transactions?: TTransactionsConfig;
   discordLoginEnabled: boolean;

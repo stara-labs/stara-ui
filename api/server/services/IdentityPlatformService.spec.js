@@ -16,6 +16,7 @@ jest.mock('firebase-admin/auth', () => ({
 const {
   identityPlatformAuthEnabled,
   identityPlatformProjectId,
+  identityPlatformWebConfig,
   identityPlatformUser,
   verifyIdentityPlatformToken,
 } = require('./IdentityPlatformService');
@@ -26,6 +27,10 @@ const originalEnvironment = {
   googleProject: process.env.GOOGLE_CLOUD_PROJECT,
   tenantId: process.env.STARA_IDENTITY_PLATFORM_TENANT_ID,
   checkRevoked: process.env.STARA_IDENTITY_PLATFORM_CHECK_REVOKED,
+  webApiKey: process.env.STARA_IDENTITY_PLATFORM_WEB_API_KEY,
+  authDomain: process.env.STARA_IDENTITY_PLATFORM_AUTH_DOMAIN,
+  appId: process.env.STARA_IDENTITY_PLATFORM_APP_ID,
+  emulatorUrl: process.env.STARA_IDENTITY_PLATFORM_EMULATOR_URL,
 };
 
 describe('IdentityPlatformService', () => {
@@ -36,6 +41,10 @@ describe('IdentityPlatformService', () => {
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.STARA_IDENTITY_PLATFORM_TENANT_ID;
     delete process.env.STARA_IDENTITY_PLATFORM_CHECK_REVOKED;
+    process.env.STARA_IDENTITY_PLATFORM_WEB_API_KEY = 'public-browser-key';
+    delete process.env.STARA_IDENTITY_PLATFORM_AUTH_DOMAIN;
+    delete process.env.STARA_IDENTITY_PLATFORM_APP_ID;
+    delete process.env.STARA_IDENTITY_PLATFORM_EMULATOR_URL;
   });
 
   afterAll(() => {
@@ -44,6 +53,10 @@ describe('IdentityPlatformService', () => {
     restoreEnv('GOOGLE_CLOUD_PROJECT', originalEnvironment.googleProject);
     restoreEnv('STARA_IDENTITY_PLATFORM_TENANT_ID', originalEnvironment.tenantId);
     restoreEnv('STARA_IDENTITY_PLATFORM_CHECK_REVOKED', originalEnvironment.checkRevoked);
+    restoreEnv('STARA_IDENTITY_PLATFORM_WEB_API_KEY', originalEnvironment.webApiKey);
+    restoreEnv('STARA_IDENTITY_PLATFORM_AUTH_DOMAIN', originalEnvironment.authDomain);
+    restoreEnv('STARA_IDENTITY_PLATFORM_APP_ID', originalEnvironment.appId);
+    restoreEnv('STARA_IDENTITY_PLATFORM_EMULATOR_URL', originalEnvironment.emulatorUrl);
   });
 
   it('uses the explicit enable flag and Cloud Run project fallback', () => {
@@ -54,6 +67,30 @@ describe('IdentityPlatformService', () => {
     delete process.env.STARA_IDENTITY_PLATFORM_PROJECT_ID;
     process.env.GOOGLE_CLOUD_PROJECT = 'stara-cloud-run';
     expect(identityPlatformProjectId()).toBe('stara-cloud-run');
+  });
+
+  it('returns only the public browser bootstrap configuration', () => {
+    process.env.STARA_IDENTITY_PLATFORM_TENANT_ID = 'workforce-tenant';
+    process.env.STARA_IDENTITY_PLATFORM_APP_ID = 'browser-app-id';
+    process.env.STARA_IDENTITY_PLATFORM_EMULATOR_URL = 'http://127.0.0.1:9099';
+
+    expect(identityPlatformWebConfig()).toEqual({
+      enabled: true,
+      apiKey: 'public-browser-key',
+      projectId: 'stara-production',
+      authDomain: 'stara-production.firebaseapp.com',
+      tenantId: 'workforce-tenant',
+      appId: 'browser-app-id',
+      emulatorUrl: 'http://127.0.0.1:9099',
+    });
+  });
+
+  it('fails closed when cutover is enabled without browser configuration', () => {
+    delete process.env.STARA_IDENTITY_PLATFORM_WEB_API_KEY;
+
+    expect(() => identityPlatformWebConfig()).toThrow(
+      'Identity Platform browser configuration is incomplete',
+    );
   });
 
   it('verifies revocation and maps only trusted token claims into the request principal', async () => {

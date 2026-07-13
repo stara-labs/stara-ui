@@ -1,9 +1,14 @@
 import React, { useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useToastContext } from '@librechat/client';
 import { useForm, Controller } from 'react-hook-form';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { REGEXP_ONLY_DIGITS, REGEXP_ONLY_DIGITS_AND_CHARS } from 'input-otp';
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot, Label } from '@librechat/client';
+import type { TLoginLayoutContext } from '~/common';
+import {
+  completeIdentityPlatformMfa,
+  identityPlatformErrorMessage,
+} from '~/lib/auth/identityPlatform';
 import { useVerifyTwoFactorTempMutation } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 
@@ -22,6 +27,8 @@ const TwoFactorScreen: React.FC = React.memo(() => {
   const [searchParams] = useSearchParams();
   const tempTokenRaw = searchParams.get('tempToken');
   const tempToken = tempTokenRaw !== null && tempTokenRaw !== '' ? tempTokenRaw : '';
+  const { startupConfig } = useOutletContext<TLoginLayoutContext>();
+  const identityPlatformEnabled = startupConfig?.identityPlatform?.enabled === true;
 
   const {
     control,
@@ -54,6 +61,24 @@ const TwoFactorScreen: React.FC = React.memo(() => {
 
   const onSubmit = useCallback(
     (data: TwoFactorFormInputs) => {
+      if (identityPlatformEnabled) {
+        if (!data.token) {
+          return;
+        }
+        setIsLoading(true);
+        void completeIdentityPlatformMfa(data.token)
+          .then(() => {
+            // Reload from the persisted Firebase session so canonical identity setup finishes
+            // before any authenticated route renders.
+            window.location.href = '/';
+          })
+          .catch((error) => {
+            setIsLoading(false);
+            showToast({ message: identityPlatformErrorMessage(error), status: 'error' });
+          });
+        return;
+      }
+
       const payload: VerifyPayload = { tempToken };
       if (useBackup && data.backupCode != null && data.backupCode !== '') {
         payload.backupCode = data.backupCode;
@@ -62,7 +87,7 @@ const TwoFactorScreen: React.FC = React.memo(() => {
       }
       verifyTempMutate(payload);
     },
-    [tempToken, useBackup, verifyTempMutate],
+    [identityPlatformEnabled, showToast, tempToken, useBackup, verifyTempMutate],
   );
 
   const toggleBackupOn = useCallback(() => {
@@ -79,7 +104,7 @@ const TwoFactorScreen: React.FC = React.memo(() => {
         <Label className="flex justify-center break-keep text-center text-sm text-text-primary">
           {localize('com_auth_two_factor')}
         </Label>
-        {!useBackup && (
+        {(!useBackup || identityPlatformEnabled) && (
           <div className="my-4 flex justify-center text-text-primary">
             <Controller
               name="token"
@@ -108,7 +133,7 @@ const TwoFactorScreen: React.FC = React.memo(() => {
             {errors.token && <span className="text-sm text-red-500">{errors.token.message}</span>}
           </div>
         )}
-        {useBackup && (
+        {useBackup && !identityPlatformEnabled && (
           <div className="my-4 flex justify-center text-text-primary">
             <Controller
               name="backupCode"
@@ -150,23 +175,24 @@ const TwoFactorScreen: React.FC = React.memo(() => {
           </button>
         </div>
         <div className="mt-4 flex justify-center">
-          {!useBackup ? (
-            <button
-              type="button"
-              onClick={toggleBackupOn}
-              className="inline-flex p-1 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-            >
-              {localize('com_ui_use_backup_code')}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={toggleBackupOff}
-              className="inline-flex p-1 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-            >
-              {localize('com_ui_use_2fa_code')}
-            </button>
-          )}
+          {!identityPlatformEnabled &&
+            (useBackup ? (
+              <button
+                type="button"
+                onClick={toggleBackupOff}
+                className="inline-flex p-1 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+              >
+                {localize('com_ui_use_2fa_code')}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleBackupOn}
+                className="inline-flex p-1 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+              >
+                {localize('com_ui_use_backup_code')}
+              </button>
+            ))}
         </div>
       </form>
     </div>
