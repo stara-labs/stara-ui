@@ -57,6 +57,7 @@ describe('VerifyEmail Identity Platform action handler', () => {
     const inviteToken = 'invite_token_123456789012345678901234';
     const continueUrl = `https://control-plane.stara.co/verify?invite_token=${inviteToken}`;
     mockParams = new URLSearchParams({
+      mode: 'verifyEmail',
       oobCode: 'verification-code',
       continueUrl,
     });
@@ -87,6 +88,35 @@ describe('VerifyEmail Identity Platform action handler', () => {
       await screen.findByRole('heading', {
         name: 'This verification link is invalid or incomplete.',
       }),
+    ).toBeInTheDocument();
+    expect(mockApplyIdentityPlatformEmailVerification).not.toHaveBeenCalled();
+  });
+
+  it('routes password reset actions through the existing reset form', async () => {
+    mockParams = new URLSearchParams({
+      mode: 'resetPassword',
+      oobCode: 'reset-code',
+      continueUrl: 'https://control-plane.stara.co/login',
+    });
+
+    render(<VerifyEmail />);
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/reset-password?mode=resetPassword&oobCode=reset-code&continueUrl=https%3A%2F%2Fcontrol-plane.stara.co%2Flogin',
+        { replace: true },
+      );
+    });
+    expect(mockApplyIdentityPlatformEmailVerification).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for unsupported Identity Platform email action modes', async () => {
+    mockParams = new URLSearchParams({ mode: 'recoverEmail', oobCode: 'recovery-code' });
+
+    render(<VerifyEmail />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'com_auth_email_verification_invalid' }),
     ).toBeInTheDocument();
     expect(mockApplyIdentityPlatformEmailVerification).not.toHaveBeenCalled();
   });
