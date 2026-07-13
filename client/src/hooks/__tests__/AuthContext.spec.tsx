@@ -114,6 +114,10 @@ function TestConsumer() {
         data-testid="identity-login"
         onClick={() => void ctx.login({ email: 'owner@example.com', password: 'password' })}
       />
+      <button
+        data-testid="auth-rerender"
+        onClick={() => ctx.setError(ctx.error ? undefined : 'force-rerender')}
+      />
     </div>
   );
 }
@@ -289,6 +293,7 @@ describe('AuthContextProvider — logout onSuccess/onError handling', () => {
     });
 
     expect(replaceSpy).not.toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true });
   });
 
   it('does not trigger silentRefresh after OIDC redirect', () => {
@@ -393,6 +398,16 @@ describe('AuthContextProvider — silentRefresh post-login redirect', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/c/abc?endpoint=bedrock', { replace: true });
     expect(mockRefreshMutate).not.toHaveBeenCalled();
     jest.useRealTimers();
+  });
+
+  it('does not start duplicate silent refreshes while bootstrap state rerenders', () => {
+    const { getByTestId } = renderProviderLive();
+
+    expect(mockRefreshMutate).toHaveBeenCalledTimes(1);
+    fireEvent.click(getByTestId('auth-rerender'));
+    fireEvent.click(getByTestId('auth-rerender'));
+
+    expect(mockRefreshMutate).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to current URL for unsafe stored redirect', () => {

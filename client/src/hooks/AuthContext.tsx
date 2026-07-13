@@ -76,6 +76,7 @@ const AuthContextProvider = ({
   children: ReactNode;
 }) => {
   const isExternalRedirectRef = useRef(false);
+  const silentRefreshAttemptedRef = useRef(false);
   const identityPlatformRef = useRef<NonNullable<t.TStartupConfig['identityPlatform']>>();
   const identitySubjectRef = useRef<string | undefined>(undefined);
   const identitySessionGenerationRef = useRef(0);
@@ -120,8 +121,6 @@ const AuthContextProvider = ({
         setIsAuthenticated(isAuthenticated);
         if (isAuthenticated) {
           setQueriesEnabled(true);
-        } else {
-          setQueriesEnabled(false);
         }
 
         const searchParams = new URLSearchParams(window.location.search);
@@ -133,7 +132,7 @@ const AuthContextProvider = ({
         const finalRedirect =
           logoutRedirect ??
           postLoginRedirect ??
-          (redirect && isSafeRedirect(redirect) ? redirect : null);
+          (redirect === '/login' || (redirect && isSafeRedirect(redirect)) ? redirect : null);
 
         if (finalRedirect == null) {
           return;
@@ -176,6 +175,7 @@ const AuthContextProvider = ({
         user: undefined,
         redirect: '/login',
       });
+      setUserContext.flush();
     }
   }, [clearIdentityClientState, identityPlatform, setUserContext]);
 
@@ -225,6 +225,7 @@ const AuthContextProvider = ({
         user: undefined,
         redirect: '/login',
       });
+      setUserContext.flush();
     },
     onError: (error) => {
       if (identityPlatform) {
@@ -239,6 +240,7 @@ const AuthContextProvider = ({
         user: undefined,
         redirect: '/login',
       });
+      setUserContext.flush();
     },
   });
   const refreshToken = useRefreshTokenMutation();
@@ -285,6 +287,10 @@ const AuthContextProvider = ({
     if (isExternalRedirectRef.current) {
       return;
     }
+    if (silentRefreshAttemptedRef.current) {
+      return;
+    }
+    silentRefreshAttemptedRef.current = true;
     refreshToken.mutate(undefined, {
       onSuccess: (data: t.TRefreshTokenResponse | undefined) => {
         if (isExternalRedirectRef.current) {
