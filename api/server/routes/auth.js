@@ -15,6 +15,9 @@ const {
   verify2FA,
 } = require('~/server/controllers/TwoFactorController');
 const { verify2FAWithTempToken } = require('~/server/controllers/auth/TwoFactorAuthController');
+const {
+  checkIdentityPlatformSignupEligibility,
+} = require('~/server/controllers/auth/IdentityPlatformAuthController');
 const { logoutController } = require('~/server/controllers/auth/LogoutController');
 const { loginController } = require('~/server/controllers/auth/LoginController');
 const { findBalanceByUser, upsertBalanceFields } = require('~/models');
@@ -79,6 +82,12 @@ router.post(
   middleware.checkInviteUser,
   middleware.validateRegistration,
   registrationController,
+);
+router.post(
+  '/identity-platform/signup/eligibility',
+  middleware.registerLimiter,
+  middleware.checkBan,
+  checkIdentityPlatformSignupEligibility,
 );
 router.post(
   '/requestPasswordReset',

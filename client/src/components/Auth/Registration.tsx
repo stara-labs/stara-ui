@@ -1,12 +1,16 @@
-import { useForm } from 'react-hook-form';
 import React, { useContext, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Turnstile } from '@marsidev/react-turnstile';
-import { ThemeContext, SecretInput, Spinner, Button, isDark } from '@librechat/client';
+import { dataService, loginPage } from 'librechat-data-provider';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import { useRegisterUserMutation } from 'librechat-data-provider/react-query';
-import { loginPage } from 'librechat-data-provider';
+import { ThemeContext, SecretInput, Spinner, Button, isDark } from '@librechat/client';
 import type { TRegisterUser, TError } from 'librechat-data-provider';
 import type { TLoginLayoutContext } from '~/common';
+import {
+  identityPlatformErrorMessage,
+  registerIdentityPlatformAccount,
+} from '~/lib/auth/identityPlatform';
 import { useLocalize, TranslationKeys } from '~/hooks';
 import { ErrorMessage } from './ErrorMessage';
 
@@ -27,12 +31,14 @@ const Registration: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [countdown, setCountdown] = useState<number>(3);
+  const [identityRegistrationComplete, setIdentityRegistrationComplete] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const token = queryParams.get('token');
   const validTheme = isDark(theme) ? 'dark' : 'light';
+  const identityPlatform = startupConfig?.identityPlatform;
 
   // only require captcha if we have a siteKey
   const requireCaptcha = Boolean(startupConfig?.turnstile?.siteKey);
@@ -70,6 +76,33 @@ const Registration: React.FC = () => {
       }
     },
   });
+
+  const submitRegistration = async (data: TRegisterUser) => {
+    if (!identityPlatform) {
+      registerUser.mutate({ ...data, token: token ?? undefined });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+    try {
+      await dataService.checkIdentityPlatformSignupEligibility({
+        email: data.email,
+        ...(token ? { invite_token: token } : {}),
+      });
+      await registerIdentityPlatformAccount(identityPlatform, {
+        email: data.email,
+        password: data.password,
+        displayName: data.name,
+        ...(token ? { inviteToken: token } : {}),
+      });
+      setIdentityRegistrationComplete(true);
+    } catch (error) {
+      setErrorMessage(identityPlatformErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const renderInput = (id: string, label: TranslationKeys, type: string, validation: object) => {
     const fieldLabel = localize(label);
@@ -131,7 +164,7 @@ const Registration: React.FC = () => {
           {localize('com_auth_error_create')} {errorMessage}
         </ErrorMessage>
       )}
-      {registerUser.isSuccess && countdown > 0 && (
+      {((registerUser.isSuccess && countdown > 0) || identityRegistrationComplete) && (
         <div
           className="rounded-md border border-green-500 bg-green-500/10 px-3 py-2 text-sm text-gray-600 dark:text-gray-200"
           role="alert"
@@ -140,20 +173,26 @@ const Registration: React.FC = () => {
             startupConfig?.emailEnabled
               ? 'com_auth_registration_success_generic'
               : 'com_auth_registration_success_insecure',
-          ) +
-            ' ' +
-            localize('com_auth_email_verification_redirecting', { 0: countdown.toString() })}
+          )}
+          {!identityRegistrationComplete &&
+            ' ' + localize('com_auth_email_verification_redirecting', { 0: countdown.toString() })}
+          {identityRegistrationComplete && (
+            <a
+              href={loginPage()}
+              className="ml-1 font-medium text-green-700 underline dark:text-green-300"
+            >
+              {localize('com_auth_back_to_login')}
+            </a>
+          )}
         </div>
       )}
-      {!startupConfigError && !isFetching && (
+      {!startupConfigError && !isFetching && !identityRegistrationComplete && (
         <>
           <form
             className="mt-6"
             aria-label="Registration form"
             method="POST"
-            onSubmit={handleSubmit((data: TRegisterUser) =>
-              registerUser.mutate({ ...data, token: token ?? undefined }),
-            )}
+            onSubmit={handleSubmit(submitRegistration)}
           >
             {renderInput('name', 'com_auth_full_name', 'text', {
               required: localize('com_auth_name_required'),
@@ -166,16 +205,17 @@ const Registration: React.FC = () => {
                 message: localize('com_auth_name_max_length'),
               },
             })}
-            {renderInput('username', 'com_auth_username', 'text', {
-              minLength: {
-                value: 2,
-                message: localize('com_auth_username_min_length'),
-              },
-              maxLength: {
-                value: 80,
-                message: localize('com_auth_username_max_length'),
-              },
-            })}
+            {!identityPlatform &&
+              renderInput('username', 'com_auth_username', 'text', {
+                minLength: {
+                  value: 2,
+                  message: localize('com_auth_username_min_length'),
+                },
+                maxLength: {
+                  value: 80,
+                  message: localize('com_auth_username_max_length'),
+                },
+              })}
             {renderInput('email', 'com_auth_email', 'email', {
               required: localize('com_auth_email_required'),
               minLength: {

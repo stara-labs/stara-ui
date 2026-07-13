@@ -1,10 +1,10 @@
 import reactRouter from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import { render, waitFor, screen } from 'test/layout-test-utils';
 import * as mockDataProvider from 'librechat-data-provider/react-query';
 import type { TStartupConfig } from 'librechat-data-provider';
-import * as miscDataProvider from '~/data-provider/Misc/queries';
 import * as endpointQueries from '~/data-provider/Endpoints/queries';
+import { render, waitFor, screen } from 'test/layout-test-utils';
+import * as miscDataProvider from '~/data-provider/Misc/queries';
 import * as authMutations from '~/data-provider/Auth/mutations';
 import * as authQueries from '~/data-provider/Auth/queries';
 import Registration from '~/components/Auth/Registration';
@@ -12,7 +12,45 @@ import AuthLayout from '~/components/Auth/AuthLayout';
 
 jest.mock('librechat-data-provider/react-query');
 
-const mockStartupConfig = {
+const mockRegisterIdentityPlatformAccount = jest.fn();
+const mockCheckIdentityPlatformSignupEligibility = jest.fn();
+jest.mock('librechat-data-provider', () => {
+  const actual = jest.requireActual('librechat-data-provider');
+  return {
+    ...actual,
+    dataService: {
+      ...actual.dataService,
+      checkIdentityPlatformSignupEligibility: (...args: unknown[]) =>
+        mockCheckIdentityPlatformSignupEligibility(...args),
+    },
+  };
+});
+jest.mock('~/lib/auth/identityPlatform', () => ({
+  clearIdentityPlatformSignupInvite: jest.fn(),
+  getIdentityPlatformAssurance: jest.fn().mockResolvedValue({
+    emailVerified: true,
+    totpEnrolled: true,
+    mfaSatisfied: true,
+  }),
+  getIdentityPlatformSignupInvite: jest.fn(),
+  identityPlatformErrorMessage: (error: Error) => error.message,
+  isIdentityPlatformRegistrationInProgress: jest.fn(() => false),
+  isSuppressedIdentityPlatformRegistrationUser: jest.fn(() => false),
+  refreshIdentityPlatformToken: jest.fn(),
+  resendIdentityPlatformEmailVerification: jest.fn(),
+  registerIdentityPlatformAccount: (...args: unknown[]) =>
+    mockRegisterIdentityPlatformAccount(...args),
+  signInToIdentityPlatform: jest.fn(),
+  signOutFromIdentityPlatform: jest.fn(),
+  subscribeToIdentityPlatform: jest.fn(() => jest.fn()),
+}));
+
+const mockStartupConfig: {
+  isFetching: boolean;
+  isLoading: boolean;
+  isError: boolean;
+  data: Partial<TStartupConfig>;
+} = {
   isFetching: false,
   isLoading: false,
   isError: false,
@@ -83,7 +121,7 @@ const setup = ({
   const mockUseOutletContext = jest.spyOn(reactRouter, 'useOutletContext').mockReturnValue({
     startupConfig: useGetStartupConfigReturnValue.data,
   });
-  const mockUseGetBannerQuery = jest
+  const _mockUseGetBannerQuery = jest
     .spyOn(miscDataProvider, 'useGetBannerQuery')
     //@ts-ignore - we don't need all parameters of the QueryObserverSuccessResult
     .mockReturnValue(useGetBannerQueryReturnValue);
@@ -154,6 +192,49 @@ test('renders registration form', () => {
     'href',
     'mock-server/oauth/saml',
   );
+});
+
+test('preflights and creates an Identity Platform account without a duplicate username', async () => {
+  const identityPlatform = {
+    enabled: true as const,
+    apiKey: 'public-key',
+    projectId: 'stara-test',
+    authDomain: 'stara-test.firebaseapp.com',
+  };
+  mockCheckIdentityPlatformSignupEligibility.mockResolvedValue({
+    eligible: true,
+    method: 'allowlisted_domain',
+  });
+  mockRegisterIdentityPlatformAccount.mockResolvedValue(undefined);
+  const { getByTestId, getByRole, queryByRole } = setup({
+    useGetStartupConfigReturnValue: {
+      ...mockStartupConfig,
+      data: {
+        ...mockStartupConfig.data,
+        identityPlatform,
+        socialLoginEnabled: false,
+      },
+    },
+  });
+
+  expect(queryByRole('textbox', { name: /Username/i })).not.toBeInTheDocument();
+  await userEvent.type(getByRole('textbox', { name: /Full name/i }), 'John Doe');
+  await userEvent.type(getByRole('textbox', { name: /Email/i }), 'john@example.com');
+  await userEvent.type(getByTestId('password'), 'strong-password');
+  await userEvent.type(getByTestId('confirm_password'), 'strong-password');
+  await userEvent.click(getByRole('button', { name: /Submit registration/i }));
+
+  await waitFor(() => {
+    expect(mockCheckIdentityPlatformSignupEligibility).toHaveBeenCalledWith({
+      email: 'john@example.com',
+    });
+    expect(mockRegisterIdentityPlatformAccount).toHaveBeenCalledWith(identityPlatform, {
+      email: 'john@example.com',
+      password: 'strong-password',
+      displayName: 'John Doe',
+    });
+    expect(getByRole('link', { name: /Back to login/i })).toBeInTheDocument();
+  });
 });
 
 // test('calls registerUser.mutate on registration', async () => {

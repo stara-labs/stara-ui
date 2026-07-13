@@ -21,7 +21,7 @@ const { identityPlatformWebConfig } = require('~/server/services/IdentityPlatfor
 const router = express.Router();
 const emailLoginEnabled =
   process.env.ALLOW_EMAIL_LOGIN === undefined || isEnabled(process.env.ALLOW_EMAIL_LOGIN);
-const passwordResetEnabled = isEnabled(process.env.ALLOW_PASSWORD_RESET);
+const isPasswordResetEnabled = () => isEnabled(process.env.ALLOW_PASSWORD_RESET);
 
 const sharedLinksEnabled =
   process.env.ALLOW_SHARED_LINKS === undefined || isEnabled(process.env.ALLOW_SHARED_LINKS);
@@ -100,14 +100,18 @@ function buildPreLoginPayload() {
     samlImageUrl: process.env.SAML_IMAGE_URL,
     serverDomain: process.env.DOMAIN_SERVER || 'http://localhost:3080',
     emailLoginEnabled: identityPlatform?.enabled || emailLoginEnabled,
-    registrationEnabled:
-      inheritedAuthEnabled && !ldap?.enabled && isEnabled(process.env.ALLOW_REGISTRATION),
+    registrationEnabled: identityPlatform?.enabled
+      ? isEnabled(process.env.ALLOW_REGISTRATION)
+      : !ldap?.enabled && isEnabled(process.env.ALLOW_REGISTRATION),
     socialLoginEnabled: inheritedAuthEnabled && isEnabled(process.env.ALLOW_SOCIAL_LOGIN),
     emailEnabled:
+      identityPlatform?.enabled ||
       (!!process.env.MAILGUN_API_KEY && !!process.env.MAILGUN_DOMAIN && !!process.env.EMAIL_FROM) ||
       (!!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM) ||
       ((!!process.env.EMAIL_SERVICE || !!process.env.EMAIL_HOST) && !!process.env.EMAIL_FROM),
-    passwordResetEnabled: inheritedAuthEnabled && passwordResetEnabled,
+    passwordResetEnabled: identityPlatform?.enabled
+      ? isPasswordResetEnabled()
+      : inheritedAuthEnabled && isPasswordResetEnabled(),
     ...(identityPlatform ? { identityPlatform } : {}),
   };
 

@@ -64,15 +64,16 @@ describe('StaraOnboardingController canonical API proxy', () => {
   it('synchronizes a verified browser identity without loading organization context', async () => {
     mockFetchJson(accountResponse());
     const res = makeRes();
+    const inviteToken = 'invite_token_123456789012345678901234';
 
-    await syncStaraIdentityController(makeReq(), res);
+    await syncStaraIdentityController(makeReq({ body: { invite_token: inviteToken } }), res);
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
       'http://stara-api:3081/v1/identity/sync',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ display_name: 'Maya' }),
+        body: JSON.stringify({ display_name: 'Maya', invite_token: inviteToken }),
       }),
     );
     expect(res.status).toHaveBeenCalledWith(200);

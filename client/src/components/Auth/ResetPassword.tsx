@@ -1,10 +1,15 @@
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Spinner, Button, SecretInput } from '@librechat/client';
 import { useOutletContext } from 'react-router-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Spinner, Button, SecretInput } from '@librechat/client';
 import { useResetPasswordMutation } from 'librechat-data-provider/react-query';
 import type { TResetPassword } from 'librechat-data-provider';
 import type { TLoginLayoutContext } from '~/common';
+import {
+  confirmIdentityPlatformPasswordReset,
+  identityPlatformErrorMessage,
+} from '~/lib/auth/identityPlatform';
 import { useLocalize } from '~/hooks';
 
 function ResetPassword() {
@@ -19,6 +24,7 @@ function ResetPassword() {
   const [params] = useSearchParams();
   const password = watch('password');
   const resetPassword = useResetPasswordMutation();
+  const [identityResetComplete, setIdentityResetComplete] = useState(false);
   const { setError, setHeaderText, startupConfig } = useOutletContext<TLoginLayoutContext>();
   const authInputClassName =
     'webkit-dark-styles transition-color peer h-auto w-full rounded-2xl border border-border-light bg-surface-primary px-3.5 pb-2.5 pr-12 pt-3 text-text-primary duration-200 hover:border-border-light focus:border-green-500 focus:outline-none focus-visible:border-green-500';
@@ -27,7 +33,26 @@ function ResetPassword() {
   const authSecretButtonClassName =
     'size-9 rounded-xl text-text-secondary-alt hover:bg-transparent hover:text-text-primary';
 
-  const onSubmit = (data: TResetPassword) => {
+  const onSubmit = async (data: TResetPassword) => {
+    if (startupConfig?.identityPlatform) {
+      const actionCode = params.get('oobCode');
+      if (!actionCode) {
+        setError('com_auth_error_invalid_reset_token');
+        return;
+      }
+      try {
+        await confirmIdentityPlatformPasswordReset(
+          startupConfig.identityPlatform,
+          actionCode,
+          data.password,
+        );
+        setIdentityResetComplete(true);
+        setHeaderText('com_auth_reset_password_success');
+      } catch (error) {
+        setError(identityPlatformErrorMessage(error));
+      }
+      return;
+    }
     resetPassword.mutate(data, {
       onError: () => {
         setError('com_auth_error_invalid_reset_token');
@@ -38,7 +63,7 @@ function ResetPassword() {
     });
   };
 
-  if (resetPassword.isSuccess) {
+  if (resetPassword.isSuccess || identityResetComplete) {
     return (
       <>
         <div
@@ -69,18 +94,22 @@ function ResetPassword() {
     >
       <div className="mb-2">
         <div className="relative">
-          <input
-            type="hidden"
-            id="token"
-            value={params.get('token') ?? ''}
-            {...register('token', { required: 'Unable to process: No valid reset token' })}
-          />
-          <input
-            type="hidden"
-            id="userId"
-            value={params.get('userId') ?? ''}
-            {...register('userId', { required: 'Unable to process: No valid user id' })}
-          />
+          {!startupConfig?.identityPlatform && (
+            <>
+              <input
+                type="hidden"
+                id="token"
+                value={params.get('token') ?? ''}
+                {...register('token', { required: 'Unable to process: No valid reset token' })}
+              />
+              <input
+                type="hidden"
+                id="userId"
+                value={params.get('userId') ?? ''}
+                {...register('userId', { required: 'Unable to process: No valid user id' })}
+              />
+            </>
+          )}
           <SecretInput
             id="password"
             autoComplete="current-password"

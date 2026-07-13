@@ -1,12 +1,13 @@
-import { useForm } from 'react-hook-form';
 import { useState, ReactNode } from 'react';
+import { useForm } from 'react-hook-form';
 import { Spinner, Button } from '@librechat/client';
 import { useOutletContext } from 'react-router-dom';
-import { useRequestPasswordResetMutation } from 'librechat-data-provider/react-query';
 import { loginPage } from 'librechat-data-provider';
+import { useRequestPasswordResetMutation } from 'librechat-data-provider/react-query';
 import type { TRequestPasswordReset, TRequestPasswordResetResponse } from 'librechat-data-provider';
-import type { TLoginLayoutContext } from '~/common';
 import type { FC } from 'react';
+import type { TLoginLayoutContext } from '~/common';
+import { requestIdentityPlatformPasswordReset } from '~/lib/auth/identityPlatform';
 import { useLocalize } from '~/hooks';
 
 const BodyTextWrapper: FC<{ children: ReactNode }> = ({ children }) => {
@@ -43,12 +44,25 @@ function RequestPasswordReset() {
     formState: { errors },
   } = useForm<TRequestPasswordReset>();
   const [bodyText, setBodyText] = useState<ReactNode | undefined>(undefined);
+  const [isIdentitySubmitting, setIsIdentitySubmitting] = useState(false);
   const { startupConfig, setHeaderText } = useOutletContext<TLoginLayoutContext>();
 
   const requestPasswordReset = useRequestPasswordResetMutation();
-  const { isLoading } = requestPasswordReset;
 
-  const onSubmit = (data: TRequestPasswordReset) => {
+  const onSubmit = async (data: TRequestPasswordReset) => {
+    if (startupConfig?.identityPlatform) {
+      setIsIdentitySubmitting(true);
+      try {
+        await requestIdentityPlatformPasswordReset(startupConfig.identityPlatform, data.email);
+      } catch {
+        // Keep the response identical so password recovery cannot enumerate accounts.
+      } finally {
+        setIsIdentitySubmitting(false);
+        setHeaderText('com_auth_reset_password_link_sent');
+        setBodyText(<ResetPasswordBodyText />);
+      }
+      return;
+    }
     requestPasswordReset.mutate(data, {
       onSuccess: (data: TRequestPasswordResetResponse) => {
         if (data.link && !startupConfig?.emailEnabled) {
@@ -73,6 +87,7 @@ function RequestPasswordReset() {
       },
     });
   };
+  const isLoading = requestPasswordReset.isLoading || isIdentitySubmitting;
 
   if (bodyText) {
     return <BodyTextWrapper>{bodyText}</BodyTextWrapper>;

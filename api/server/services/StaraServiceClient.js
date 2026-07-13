@@ -70,8 +70,40 @@ const callStaraApi = async (user, path, options = {}) => {
   return payload;
 };
 
+const callStaraApiPublic = async (path, options = {}) => {
+  const response = await fetch(`${requireStaraApiBaseUrl()}${path}`, {
+    method: options.method ?? 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(process.env.STARA_API_TOKEN
+        ? { Authorization: `Bearer ${process.env.STARA_API_TOKEN}` }
+        : {}),
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+  const text = await response.text();
+  let payload = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = {};
+    }
+  }
+  if (!response.ok) {
+    const error = new Error(
+      safeString(payload.message ?? payload.error, 'The Stara API request failed', 300),
+    );
+    error.status = response.status;
+    error.code = safeString(payload.error);
+    throw error;
+  }
+  return payload;
+};
+
 module.exports = {
   callStaraApi,
+  callStaraApiPublic,
   getUserId,
   normalizeEmail,
   safeString,

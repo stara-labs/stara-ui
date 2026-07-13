@@ -169,6 +169,8 @@ export const login = () => `${BASE_URL}/api/auth/login`;
 export const logout = () => `${BASE_URL}/api/auth/logout`;
 
 export const register = () => `${BASE_URL}/api/auth/register`;
+export const identityPlatformSignupEligibility = () =>
+  `${BASE_URL}/api/auth/identity-platform/signup/eligibility`;
 
 export const loginFacebook = () => `${BASE_URL}/api/auth/facebook`;
 

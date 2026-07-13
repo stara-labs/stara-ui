@@ -203,9 +203,10 @@ describe('GET /api/config', () => {
       expect(response.body).toEqual(
         expect.objectContaining({
           emailLoginEnabled: true,
-          registrationEnabled: false,
+          registrationEnabled: true,
           socialLoginEnabled: false,
-          passwordResetEnabled: false,
+          passwordResetEnabled: true,
+          emailEnabled: true,
           googleLoginEnabled: false,
         }),
       );

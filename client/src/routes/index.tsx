@@ -6,6 +6,7 @@ import {
   ResetPassword,
   ApiErrorWatcher,
   TwoFactorScreen,
+  IdentityPlatformMfaSetup,
   RequestPasswordReset,
 } from '~/components/Auth';
 import { MarketplaceProvider } from '~/components/Agents/MarketplaceContext';
@@ -131,6 +132,10 @@ export const router = createBrowserRouter(
             {
               path: 'login/2fa',
               element: <TwoFactorScreen />,
+            },
+            {
+              path: 'login/mfa-setup',
+              element: <IdentityPlatformMfaSetup />,
             },
           ],
         },
