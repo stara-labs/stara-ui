@@ -125,6 +125,7 @@ jest.mock('~/server/services/Config', () => ({
   setCachedTools: jest.fn(),
   getCachedTools: jest.fn(),
   getMCPServerTools: jest.fn(),
+  cacheMCPServerTools: jest.fn().mockResolvedValue(undefined),
   loadCustomConfig: jest.fn(),
   getAppConfig: jest.fn().mockResolvedValue({ mcpConfig: {} }),
 }));
@@ -2499,6 +2500,55 @@ describe('MCP Routes', () => {
       expect(response.status).toBe(403);
       expect(response.body).toEqual({ message: 'Forbidden: Insufficient permissions' });
       expect(mockResolveAllMcpConfigs).not.toHaveBeenCalled();
+    });
+
+    it('should connect the fixed Stara server on demand in canonical mode', async () => {
+      const { Constants } = require('librechat-data-provider');
+      const { getMCPServerTools } = require('~/server/services/Config');
+      const config = {
+        type: 'http',
+        url: 'http://stara-mcp:3083/mcp',
+        startup: false,
+        headers: { 'x-stara-tenant-id': 'tenant-1' },
+      };
+      const serverTools = {
+        [`stara_context_build${Constants.mcp_delimiter}stara-control-plane`]: {
+          type: 'function',
+          function: {
+            name: `stara_context_build${Constants.mcp_delimiter}stara-control-plane`,
+            description: 'Build governed context',
+            parameters: { type: 'object' },
+          },
+        },
+      };
+      mockRegistryInstance.isDynamicServerManagementEnabled.mockReturnValue(false);
+      mockResolveAllMcpConfigs.mockResolvedValueOnce({ 'stara-control-plane': config });
+      getMCPServerTools.mockResolvedValueOnce(null);
+      const mockGetConnection = jest.fn().mockResolvedValue({});
+      const mockGetServerToolFunctions = jest
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(serverTools);
+      require('~/config').getMCPManager.mockReturnValue({
+        getConnection: mockGetConnection,
+        getServerToolFunctions: mockGetServerToolFunctions,
+      });
+
+      const response = await request(app).get('/api/mcp/tools');
+
+      expect(response.status).toBe(200);
+      expect(mockGetConnection).toHaveBeenCalledWith({
+        serverName: 'stara-control-plane',
+        user: expect.objectContaining({ id: 'test-user-id' }),
+        serverConfig: config,
+      });
+      expect(response.body.servers['stara-control-plane'].tools).toEqual([
+        {
+          name: 'stara_context_build',
+          pluginKey: `stara_context_build${Constants.mcp_delimiter}stara-control-plane`,
+          description: 'Build governed context',
+        },
+      ]);
     });
 
     it('should continue returning MCP tools when one server cache lookup fails', async () => {

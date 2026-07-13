@@ -32,6 +32,7 @@ const {
 const { cacheMCPServerTools, getMCPServerTools } = require('~/server/services/Config');
 const { getResourcePermissionsMap } = require('~/server/services/PermissionService');
 const { hasCapability } = require('~/server/middleware/roles/capabilities');
+const { STARA_MCP_SERVER_NAME } = require('~/server/services/Config/staraDefaults');
 const { getMCPManager, getMCPServersRegistry } = require('~/config');
 const db = require('~/models');
 
@@ -93,6 +94,8 @@ const getMCPTools = async (req, res) => {
     }
 
     const mcpManager = getMCPManager();
+    const canonicalStaraMcp =
+      getMCPServersRegistry().isDynamicServerManagementEnabled?.() === false;
     const mcpServers = {};
 
     const serverToolsMap = new Map();
@@ -118,6 +121,15 @@ const getMCPTools = async (req, res) => {
       let serverTools;
       try {
         serverTools = await mcpManager.getServerToolFunctions(userId, serverName);
+        if (!serverTools && canonicalStaraMcp && serverName === STARA_MCP_SERVER_NAME) {
+          // Canonical Stara connections require actor headers, so they start per user on demand.
+          await mcpManager.getConnection({
+            serverName,
+            user: req.user,
+            serverConfig: mcpConfig[serverName],
+          });
+          serverTools = await mcpManager.getServerToolFunctions(userId, serverName);
+        }
       } catch (error) {
         logger.error(`[getMCPTools] Error fetching tools for server ${serverName}:`, error);
         continue;
