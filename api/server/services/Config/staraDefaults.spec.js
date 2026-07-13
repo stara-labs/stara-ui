@@ -72,7 +72,7 @@ describe('applyStaraControlPlaneDefaults', () => {
         type: 'http',
         url: 'http://stara-mcp:3083/mcp',
         chatMenu: true,
-        startup: true,
+        startup: false,
       }),
     );
   });

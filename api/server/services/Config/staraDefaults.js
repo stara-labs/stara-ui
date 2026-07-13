@@ -153,9 +153,9 @@ function applyMcpDefaults(config, mcpUrl) {
         type: 'http',
         url: `${mcpUrl}/mcp`,
         chatMenu: true,
-        startup: true,
         timeout: 60000,
         ...config.mcpServers?.[STARA_MCP_SERVER_NAME],
+        startup: false,
       },
     },
   };

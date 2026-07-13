@@ -43,6 +43,8 @@ const { exchangeOboToken } = require('./OboTokenService');
 const { createOboTrustChecker } = require('./OboPolicyService');
 const { reinitMCPServer } = require('./Tools/mcp');
 const { getAppConfig } = require('./Config');
+const { STARA_MCP_SERVER_NAME } = require('./Config/staraDefaults');
+const { callStaraApi } = require('./StaraServiceClient');
 const { getLogStores } = require('~/cache');
 
 const MAX_CACHE_SIZE = 1000;
@@ -143,6 +145,73 @@ async function resolveMcpConfigNames(req) {
   return Object.keys(appConfig?.mcpConfig || {});
 }
 
+function canonicalMcpBaselineGrants() {
+  const grants = (process.env.STARA_MCP_BASELINE_GRANTS ?? '')
+    .split(',')
+    .map((grant) => grant.trim())
+    .filter(Boolean);
+  if (grants.length === 0) {
+    throw new Error('STARA_MCP_BASELINE_GRANTS is required in canonical Stara MCP mode.');
+  }
+  if (grants.some((grant) => !/^[a-z0-9._:-]{1,128}$/i.test(grant))) {
+    throw new Error('STARA_MCP_BASELINE_GRANTS contains an invalid grant name.');
+  }
+  return [...new Set(grants)];
+}
+
+/** Overlay trusted actor headers after shared operator configs leave the registry cache. */
+async function applyCanonicalStaraMcpContext(configs, user, registry) {
+  if (
+    registry.isDynamicServerManagementEnabled?.() !== false ||
+    configs?.[STARA_MCP_SERVER_NAME] == null
+  ) {
+    return configs;
+  }
+
+  const tenantId = getTenantId();
+  if (!tenantId || !user?.id) {
+    throw new Error('Canonical Stara MCP requires an authenticated tenant context.');
+  }
+  const grants = canonicalMcpBaselineGrants();
+  const account = await callStaraApi(user, '/v1/me', { tenantId });
+  const membership = account.memberships?.find(
+    (candidate) =>
+      candidate?.membership_status === 'active' &&
+      (candidate.tenant_key === tenantId || candidate.tenant_id === tenantId),
+  );
+  const actorId = typeof account.user?.id === 'string' ? account.user.id.trim() : '';
+  const roleId = typeof membership?.role_key === 'string' ? membership.role_key.trim() : '';
+  const scopes = membership?.scope_ids
+    ?.filter((scope) => typeof scope === 'string')
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+  if (!membership || !actorId || !roleId || !scopes?.length) {
+    throw new Error('Canonical Stara MCP requires an active membership with assigned scopes.');
+  }
+  if (account.assurance?.email_verified !== true || account.assurance?.mfa_enrolled !== true) {
+    throw new Error('Canonical Stara MCP requires verified email and MFA.');
+  }
+
+  const server = configs[STARA_MCP_SERVER_NAME];
+  return {
+    ...configs,
+    [STARA_MCP_SERVER_NAME]: {
+      ...server,
+      startup: false,
+      headers: {
+        ...(server.headers ?? {}),
+        'x-stara-tenant-id': membership.tenant_key ?? tenantId,
+        'x-stara-actor-id': actorId,
+        'x-stara-scope': scopes.join(','),
+        'x-stara-role-ids': roleId,
+        'x-stara-grants': grants.join(','),
+        'x-stara-email-verified': '{{LIBRECHAT_USER_EMAILVERIFIED}}',
+        'x-stara-mfa-enrolled': '{{LIBRECHAT_USER_TWOFACTORENABLED}}',
+      },
+    },
+  };
+}
+
 /**
  * Resolves config-source servers and merges all server configs (YAML + config + user DB)
  * for the given user context. Shared helper for controllers needing the full merged config.
@@ -162,11 +231,10 @@ async function resolveAllMcpConfigs(userId, user) {
       error,
     );
   }
-  if (user?.role) {
-    return await registry.getAllServerConfigs(userId, configServers, user.role);
-  }
-
-  return await registry.getAllServerConfigs(userId, configServers);
+  const configs = user?.role
+    ? await registry.getAllServerConfigs(userId, configServers, user.role)
+    : await registry.getAllServerConfigs(userId, configServers);
+  return await applyCanonicalStaraMcpContext(configs, user, registry);
 }
 
 function getServerCustomUserVars(userMCPAuthMap, serverName) {
