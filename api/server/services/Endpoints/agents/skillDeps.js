@@ -28,6 +28,13 @@ const {
   isEphemeralAgentId,
 } = require('librechat-data-provider');
 const { checkPermission, grantPermission } = require('~/server/services/PermissionService');
+const { canonicalSkillsEnabled } = require('~/models/canonicalSkills');
+const {
+  canonicalFilesEnabled,
+  deleteCanonicalFiles,
+  getCanonicalDownloadStream,
+  uploadCanonicalBuffer,
+} = require('~/server/services/CanonicalFileService');
 const { getFileStrategy } = require('~/server/utils/getFileStrategy');
 const db = require('~/models');
 
@@ -56,6 +63,11 @@ function getSkillStrategyFunctions(source) {
       getDownloadStream: (_req, filepath) => getDeploymentSkillDownloadStream(filepath),
     };
   }
+  if (source === 'stara') {
+    return {
+      getDownloadStream: (req, fileId) => getCanonicalDownloadStream(req.user, fileId),
+    };
+  }
   return getStrategyFunctions(source);
 }
 
@@ -78,8 +90,49 @@ async function saveSkillFileContent({ req, skillId, relativePath, content, mimeT
   const tenantId = resolveRequestTenantId(req);
   const fileId = crypto.randomUUID();
   const filename = basename(relativePath);
-  const storageFileName = `${fileId}__${filename}`;
   const buffer = Buffer.from(content, 'utf8');
+
+  if (canonicalSkillsEnabled() && canonicalFilesEnabled()) {
+    await uploadCanonicalBuffer({
+      user: req.user,
+      buffer,
+      fileId,
+      filename,
+      mediaType: mimeType,
+    });
+    let result;
+    try {
+      result = await db.upsertSkillFile({
+        skillId,
+        relativePath,
+        file_id: fileId,
+        filename,
+        filepath: `/api/files/download/canonical/${fileId}`,
+        storageKey: fileId,
+        source: 'stara',
+        mimeType,
+        bytes: buffer.length,
+        isExecutable: false,
+        author: req.user._id ?? req.user.id,
+        tenantId,
+      });
+      if (!result) {
+        const error = new Error('Skill file save failed to persist metadata');
+        error.code = 'SKILL_FILE_UPSERT_NOT_FOUND';
+        throw error;
+      }
+    } catch (error) {
+      await deleteCanonicalFiles(req.user, [fileId]).catch(() => undefined);
+      throw error;
+    }
+
+    if (existingFile?.file_id && existingFile.file_id !== fileId) {
+      deleteCanonicalFiles(req.user, [existingFile.file_id]).catch(() => undefined);
+    }
+    return { bytes: result.bytes, relativePath: result.relativePath };
+  }
+
+  const storageFileName = `${fileId}__${filename}`;
   const storage = resolveSkillStorage(req, { isImage: mimeType.startsWith('image/') });
   const filepath = await storage.saveBuffer({
     userId: req.user.id,

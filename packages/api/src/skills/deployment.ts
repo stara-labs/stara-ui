@@ -80,7 +80,7 @@ type SkillLookupOptions = {
 };
 
 type SkillSummaryRow = {
-  _id: Types.ObjectId;
+  _id: SkillId;
   name: string;
   displayTitle?: string;
   description: string;
@@ -88,7 +88,7 @@ type SkillSummaryRow = {
   disableModelInvocation?: boolean;
   userInvocable?: boolean;
   allowedTools?: string[];
-  author: Types.ObjectId;
+  author: Types.ObjectId | string;
   authorName?: string;
   version?: number;
   source?: string;
@@ -120,7 +120,7 @@ type AlwaysApplySkillRow = {
 };
 
 type ListSkillsByAccessParams = {
-  accessibleIds: Types.ObjectId[];
+  accessibleIds: SkillId[];
   category?: string;
   search?: string;
   limit: number;
@@ -134,7 +134,7 @@ type ListSkillsByAccessResult = {
 };
 
 type ListAlwaysApplyParams = {
-  accessibleIds: Types.ObjectId[];
+  accessibleIds: SkillId[];
   limit: number;
   cursor?: string | null;
 };
@@ -145,7 +145,13 @@ type ListAlwaysApplyResult = {
   after?: string | null;
 };
 
-type SkillFileRow = Omit<DeploymentSkillFile, 'codeEnvRef' | 'content' | 'isBinary'> & {
+type SkillFileRow = Omit<
+  DeploymentSkillFile,
+  '_id' | 'skillId' | 'author' | 'codeEnvRef' | 'content' | 'isBinary'
+> & {
+  _id: SkillId;
+  skillId: SkillId;
+  author: Types.ObjectId | string;
   storageKey?: string;
   storageRegion?: string;
   tenantId?: string;
@@ -161,7 +167,7 @@ export type DeploymentSkillBaseMethods = {
   getSkillById?: (id: SkillId) => Promise<SkillDetailRow | null>;
   getSkillByName?: (
     name: string,
-    accessibleIds: Types.ObjectId[],
+    accessibleIds: SkillId[],
     options?: SkillLookupOptions,
   ) => Promise<SkillDetailRow | null>;
   listSkillsByAccess?: (params: ListSkillsByAccessParams) => Promise<ListSkillsByAccessResult>;
@@ -181,7 +187,7 @@ export type DeploymentSkillBaseMethods = {
   ) => Promise<{ matchedCount: number; modifiedCount: number } | void>;
 };
 
-type Cursor = { updatedAt: Date; _id: Types.ObjectId };
+type Cursor = { updatedAt: Date; _id: SkillId };
 type CollisionFilterResult<T> = {
   rows: T[];
 };
@@ -241,7 +247,7 @@ export class DeploymentSkillRegistry {
 
   getByName(
     name: string,
-    accessibleIds: Types.ObjectId[],
+    accessibleIds: SkillId[],
     _options?: SkillLookupOptions,
   ): DeploymentSkill | null {
     const skill = this.skillsByName.get(name);
@@ -254,7 +260,7 @@ export class DeploymentSkillRegistry {
     return skill;
   }
 
-  namesByAccess(accessibleIds: Types.ObjectId[]): Set<string> {
+  namesByAccess(accessibleIds: SkillId[]): Set<string> {
     const accessibleSet = new Set(accessibleIds.map((id) => id.toString()));
     const names = new Set<string>();
     for (const skill of this.list()) {
@@ -340,17 +346,16 @@ export function getDeploymentSkillIds(): Types.ObjectId[] {
   return registry.ids();
 }
 
-export function mergeDeploymentSkillIds(ids: Array<SkillId>): Types.ObjectId[] {
+export function mergeDeploymentSkillIds(ids: Array<SkillId>): SkillId[] {
   const seen = new Set<string>();
-  const merged: Types.ObjectId[] = [];
+  const merged: SkillId[] = [];
   for (const id of [...ids, ...registry.ids()]) {
-    const oid = typeof id === 'string' ? new Types.ObjectId(id) : id;
-    const key = oid.toString();
+    const key = id.toString();
     if (seen.has(key)) {
       continue;
     }
     seen.add(key);
-    merged.push(oid);
+    merged.push(id);
   }
   return merged;
 }
@@ -463,7 +468,7 @@ export function createDeploymentSkillMethods<T extends DeploymentSkillBaseMethod
     },
     getSkillByName: async (
       name: string,
-      accessibleIds: Types.ObjectId[],
+      accessibleIds: SkillId[],
       options?: SkillLookupOptions,
     ): Promise<SkillDetailRow | null> => {
       const deployment = registry.getByName(name, accessibleIds, options);
@@ -951,11 +956,11 @@ function toSkillFileContentRow(file: DeploymentSkillFile): SkillFileContentRow {
   };
 }
 
-function stripDeploymentIds(ids: Types.ObjectId[]): Types.ObjectId[] {
+function stripDeploymentIds(ids: SkillId[]): SkillId[] {
   return ids.filter((id) => !registry.hasId(id));
 }
 
-function hasAccessibleId(ids: Types.ObjectId[], skillId: Types.ObjectId): boolean {
+function hasAccessibleId(ids: SkillId[], skillId: Types.ObjectId): boolean {
   const key = skillId.toString();
   return ids.some((id) => id.toString() === key);
 }
@@ -1028,14 +1033,17 @@ function decodeCursor(cursor: string | null | undefined): Cursor | null {
       updatedAt?: string;
       _id?: string;
     };
-    if (!decoded.updatedAt || !decoded._id || !Types.ObjectId.isValid(decoded._id)) {
+    if (!decoded.updatedAt || !decoded._id) {
       return null;
     }
     const updatedAt = new Date(decoded.updatedAt);
     if (Number.isNaN(updatedAt.getTime())) {
       return null;
     }
-    return { updatedAt, _id: new Types.ObjectId(decoded._id) };
+    return {
+      updatedAt,
+      _id: Types.ObjectId.isValid(decoded._id) ? new Types.ObjectId(decoded._id) : decoded._id,
+    };
   } catch {
     return null;
   }

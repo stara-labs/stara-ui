@@ -7,6 +7,7 @@ const {
   createImportHandler,
   generateCheckAccess,
   getStorageMetadata,
+  guessMimeType,
   resolveRequestTenantId,
   restoreTenantContextFromReq,
 } = require('@librechat/api');
@@ -28,6 +29,7 @@ const {
   getSkillFileByPath,
   getRoleByName,
 } = require('~/models');
+const { canonicalSkillId, canonicalSkillsEnabled } = require('~/models/canonicalSkills');
 const { requireJwtAuth, canAccessSkillResource } = require('~/server/middleware');
 const {
   findAccessibleResources,
@@ -36,6 +38,11 @@ const {
   grantPermission,
 } = require('~/server/services/PermissionService');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
+const {
+  canonicalFilesEnabled,
+  deleteCanonicalFiles,
+  uploadCanonicalBuffer,
+} = require('~/server/services/CanonicalFileService');
 const { createFileLimiters } = require('~/server/middleware/limiters/uploadLimiters');
 const { maybeRunGitHubSkillSyncForRequest } = require('~/server/services/Skills/sync');
 const configMiddleware = require('~/server/middleware/config/app');
@@ -104,6 +111,10 @@ const checkSkillCreate = generateCheckAccess({
 // ---------------------------------------------------------------------------
 const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 const skillDbMethods = getSkillDbMethods();
+const canonicalSkillFilesEnabled = () => canonicalSkillsEnabled() && canonicalFilesEnabled();
+const isValidSkillId = (value) =>
+  isValidObjectIdString(value) ||
+  (canonicalSkillsEnabled() && canonicalSkillId(value?.toString?.() ?? value) != null);
 
 router.use(requireJwtAuth);
 router.use(configMiddleware);
@@ -137,7 +148,7 @@ const handlers = createSkillsHandlers({
         hasPublicPermission(params)
       : hasPublicPermission(params),
   grantPermission,
-  isValidObjectIdString,
+  isValidObjectIdString: isValidSkillId,
 });
 
 // ---------------------------------------------------------------------------
@@ -164,6 +175,22 @@ const importHandler = createImportHandler({
   deleteSkill,
   upsertSkillFile,
   saveBuffer: (req, { userId, buffer, fileName, basePath, isImage, tenantId }) => {
+    if (canonicalSkillFilesEnabled()) {
+      const separator = fileName.indexOf('__');
+      const fileId = separator > 0 ? fileName.slice(0, separator) : '';
+      const filename = separator > 0 ? fileName.slice(separator + 2) : fileName;
+      return uploadCanonicalBuffer({
+        user: req.user,
+        buffer,
+        fileId,
+        filename,
+        mediaType: guessMimeType(filename),
+      }).then((file) => ({
+        filepath: file.filepath,
+        source: 'stara',
+        storageKey: fileId,
+      }));
+    }
     const requestTenantId = tenantId ?? resolveRequestTenantId(req);
     const storage = resolveSkillStorage(req, { isImage });
     return storage
@@ -175,6 +202,10 @@ const importHandler = createImportHandler({
       }));
   },
   deleteFile: (req, file) => {
+    if (file.source === 'stara') {
+      const fileId = file.storageKey ?? file.file_id;
+      return deleteCanonicalFiles(req.user, [fileId]);
+    }
     const { deleteFile } = getStrategyFunctions(file.source);
     if (deleteFile) {
       return deleteFile(req, file);
@@ -219,9 +250,52 @@ async function uploadFileHandler(req, res) {
 
     const fileId = crypto.randomUUID();
     const filename = file.originalname;
+    const mediaType = file.mimetype || 'application/octet-stream';
+
+    if (canonicalSkillFilesEnabled()) {
+      await uploadCanonicalBuffer({
+        user: req.user,
+        buffer: file.buffer,
+        fileId,
+        filename,
+        mediaType,
+      });
+      let result;
+      try {
+        result = await upsertSkillFile({
+          skillId,
+          relativePath,
+          file_id: fileId,
+          filename,
+          filepath: `/api/files/download/canonical/${fileId}`,
+          storageKey: fileId,
+          source: 'stara',
+          mimeType: mediaType,
+          bytes: file.size,
+          isExecutable: false,
+          author: req.user._id ?? req.user.id,
+          tenantId,
+        });
+        if (!result) {
+          const error = new Error('Skill file save failed to persist metadata');
+          error.code = 'SKILL_FILE_UPSERT_NOT_FOUND';
+          throw error;
+        }
+      } catch (associationError) {
+        await deleteCanonicalFiles(req.user, [fileId]).catch(() => undefined);
+        throw associationError;
+      }
+      if (existingFile?.file_id && existingFile.file_id !== fileId) {
+        deleteCanonicalFiles(req.user, [existingFile.file_id]).catch((cleanupError) =>
+          logger.error('[uploadFile] Old canonical object cleanup failed:', cleanupError),
+        );
+      }
+      return res.status(200).json(result);
+    }
+
     const storageFileName = `${fileId}__${filename}`;
 
-    const isImage = (file.mimetype || '').startsWith('image/');
+    const isImage = mediaType.startsWith('image/');
     const storage = resolveSkillStorage(req, { isImage });
     const filepath = await storage.saveBuffer({
       userId: req.user.id,
@@ -242,7 +316,7 @@ async function uploadFileHandler(req, res) {
         filepath,
         ...storageMetadata,
         source: storage.source,
-        mimeType: file.mimetype || 'application/octet-stream',
+        mimeType: mediaType,
         bytes: file.size,
         isExecutable: false,
         author: req.user._id,

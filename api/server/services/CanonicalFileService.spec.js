@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { Readable } = require('stream');
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('./StaraServiceClient', () => ({
@@ -11,12 +12,15 @@ jest.mock('./StaraServiceClient', () => ({
 const fetch = require('node-fetch');
 const { callStaraApi } = require('./StaraServiceClient');
 const {
+  checksumBuffer,
   checksumFile,
   createCanonicalDownload,
   deleteCanonicalFiles,
+  getCanonicalDownloadStream,
   listCanonicalFiles,
   serverUploadHeaders,
   serverUploadUrl,
+  uploadCanonicalBuffer,
   uploadCanonicalFile,
 } = require('./CanonicalFileService');
 
@@ -54,6 +58,11 @@ describe('CanonicalFileService', () => {
 
   it('computes the exact SHA-256 and base64 CRC32C upload contract', async () => {
     await expect(checksumFile(filepath)).resolves.toEqual({
+      byteSize: 5,
+      sha256: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+      crc32c: 'mnG7TA==',
+    });
+    expect(checksumBuffer(Buffer.from('hello'))).toEqual({
       byteSize: 5,
       sha256: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
       crc32c: 'mnG7TA==',
@@ -159,6 +168,51 @@ describe('CanonicalFileService', () => {
       `/v1/files/${FILE_ID}`,
       expect.objectContaining({ method: 'DELETE', tenantId: 'tenant_acme' }),
     );
+  });
+
+  it('uploads an in-memory skill file through the canonical object contract', async () => {
+    callStaraApi
+      .mockResolvedValueOnce({
+        file: { ...canonicalFile, status: 'pending' },
+        upload: {
+          url: 'https://storage.example/upload',
+          method: 'PUT',
+          headers: { 'content-type': 'text/plain', 'x-goog-hash': 'crc32c=mnG7TA==' },
+        },
+      })
+      .mockResolvedValueOnce({ file: canonicalFile });
+    fetch.mockResolvedValueOnce({ ok: true, status: 200 });
+
+    await expect(
+      uploadCanonicalBuffer({
+        user,
+        buffer: Buffer.from('hello'),
+        fileId: FILE_ID,
+        filename: 'references/hello.txt',
+        mediaType: 'text/plain',
+      }),
+    ).resolves.toMatchObject({ file_id: FILE_ID, source: 'stara', context: 'skill_file' });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://storage.example/upload',
+      expect.objectContaining({ method: 'PUT', body: Buffer.from('hello') }),
+    );
+  });
+
+  it('returns a readable stream from a canonical signed download', async () => {
+    callStaraApi.mockResolvedValueOnce({
+      file: canonicalFile,
+      download: { url: 'https://storage.example/read', method: 'GET', headers: {} },
+    });
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: Readable.from([Buffer.from('hello')]),
+    });
+
+    const stream = await getCanonicalDownloadStream(user, FILE_ID);
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    expect(Buffer.concat(chunks).toString('utf8')).toBe('hello');
   });
 
   it('maps list and download responses and deletes unique UUIDs only', async () => {

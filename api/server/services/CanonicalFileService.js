@@ -29,10 +29,60 @@ const uploadCanonicalFile = async ({ user, file, fileId, tempFileId, metadata = 
   if (!file?.path) {
     throw badRequest('No file was staged for upload');
   }
-  const tenantId = requireTenantId(user);
   const checksums = await checksumFile(file.path);
   const filename = sanitizeFilename(path.basename(file.originalname || file.filename || 'file'));
   const mediaType = file.mimetype || 'application/octet-stream';
+  return uploadCanonicalContent({
+    user,
+    body: fs.createReadStream(file.path),
+    fileId,
+    filename,
+    mediaType,
+    checksums,
+    metadata,
+    mapOptions: {
+      tempFileId,
+      context: metadata.message_file ? FileContext.message_attachment : FileContext.agents,
+      width: finiteNumber(metadata.width),
+      height: finiteNumber(metadata.height),
+    },
+  });
+};
+
+const uploadCanonicalBuffer = async ({
+  user,
+  buffer,
+  fileId,
+  filename,
+  mediaType = 'application/octet-stream',
+  metadata = {},
+}) => {
+  if (!Buffer.isBuffer(buffer)) {
+    throw badRequest('A file buffer is required');
+  }
+  return uploadCanonicalContent({
+    user,
+    body: buffer,
+    fileId,
+    filename: sanitizeFilename(path.basename(filename || 'file')),
+    mediaType,
+    checksums: checksumBuffer(buffer),
+    metadata,
+    mapOptions: { context: metadata.context ?? FileContext.skill_file },
+  });
+};
+
+const uploadCanonicalContent = async ({
+  user,
+  body,
+  fileId,
+  filename,
+  mediaType,
+  checksums,
+  metadata,
+  mapOptions,
+}) => {
+  const tenantId = requireTenantId(user);
   const sensitivity = SENSITIVITIES.has(metadata.sensitivity) ? metadata.sensitivity : 'internal';
   let prepared;
 
@@ -61,7 +111,7 @@ const uploadCanonicalFile = async ({ user, file, fileId, tempFileId, metadata = 
         ...upload.headers,
         'content-length': String(checksums.byteSize),
       }),
-      body: fs.createReadStream(file.path),
+      body,
     });
     if (!uploaded.ok) {
       throw upstreamError(`Object upload failed with HTTP ${uploaded.status}`);
@@ -71,12 +121,7 @@ const uploadCanonicalFile = async ({ user, file, fileId, tempFileId, metadata = 
       method: 'POST',
       tenantId,
     });
-    return mapCanonicalFile(completed.file, user, {
-      tempFileId,
-      context: metadata.message_file ? FileContext.message_attachment : FileContext.agents,
-      width: finiteNumber(metadata.width),
-      height: finiteNumber(metadata.height),
-    });
+    return mapCanonicalFile(completed.file, user, mapOptions);
   } catch (error) {
     if (prepared?.file?.id) {
       await callStaraApi(user, `/v1/files/${encodeURIComponent(prepared.file.id)}`, {
@@ -93,6 +138,21 @@ const createCanonicalDownload = async (user, fileId) => {
     tenantId: requireTenantId(user),
   });
   return { file: mapCanonicalFile(response.file, user), download: response.download };
+};
+
+const getCanonicalDownloadStream = async (user, fileId) => {
+  const { download } = await createCanonicalDownload(user, fileId);
+  if (!download?.url || download.method !== 'GET') {
+    throw upstreamError('Stara API returned an invalid download contract');
+  }
+  const response = await fetch(serverUploadUrl(download.url), {
+    method: 'GET',
+    headers: serverUploadHeaders(download.url, download.headers ?? {}),
+  });
+  if (!response.ok || !response.body) {
+    throw upstreamError(`Object download failed with HTTP ${response.status}`);
+  }
+  return response.body;
 };
 
 const deleteCanonicalFiles = async (user, fileIds) => {
@@ -143,6 +203,18 @@ const checksumFile = async (filepath) => {
   const crcBuffer = Buffer.allocUnsafe(4);
   crcBuffer.writeUInt32BE(crc32c.digest());
   return { byteSize, sha256: sha256.digest('hex'), crc32c: crcBuffer.toString('base64') };
+};
+
+const checksumBuffer = (buffer) => {
+  const crc32c = new Crc32c();
+  crc32c.update(buffer);
+  const crcBuffer = Buffer.allocUnsafe(4);
+  crcBuffer.writeUInt32BE(crc32c.digest());
+  return {
+    byteSize: buffer.length,
+    sha256: createHash('sha256').update(buffer).digest('hex'),
+    crc32c: crcBuffer.toString('base64'),
+  };
 };
 
 const serverUploadUrl = (signedUrl) => {
@@ -199,12 +271,15 @@ const upstreamError = (message) => Object.assign(new Error(message), { status: 5
 
 module.exports = {
   canonicalFilesEnabled,
+  checksumBuffer,
   checksumFile,
   createCanonicalDownload,
   deleteCanonicalFiles,
+  getCanonicalDownloadStream,
   listCanonicalFiles,
   mapCanonicalFile,
   serverUploadHeaders,
   serverUploadUrl,
+  uploadCanonicalBuffer,
   uploadCanonicalFile,
 };

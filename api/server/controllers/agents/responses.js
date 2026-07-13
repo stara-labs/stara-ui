@@ -401,6 +401,7 @@ const createResponse = async (req, res) => {
             role: req.user.role,
             resourceType: ResourceType.SKILL,
             requiredPermissions: PermissionBits.VIEW,
+            invoke: true,
           }),
         )
       : [];

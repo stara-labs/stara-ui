@@ -21,12 +21,12 @@ const {
 } = require('~/server/services/GraphApiService');
 const db = require('~/models');
 const {
-  getCanonicalAgentPermissions,
-  getCanonicalAgentRoles,
-  isCanonicalAgentSharing,
+  getCanonicalResourcePermissions,
+  getCanonicalResourceRoles,
+  isCanonicalResourceSharing,
   searchCanonicalPrincipals,
-  updateCanonicalAgentPermissions,
-} = require('~/server/services/CanonicalAgentSharingService');
+  updateCanonicalResourcePermissions,
+} = require('~/server/services/CanonicalResourceSharingService');
 
 const matchesCurrentTenant = (principal, tenantId) => {
   if (!tenantId || tenantId === SYSTEM_TENANT_ID) {
@@ -86,12 +86,13 @@ const updateResourcePermissions = async (req, res) => {
     const { resourceType, resourceId } = req.params;
     validateResourceType(resourceType);
 
-    if (isCanonicalAgentSharing(resourceType)) {
+    if (isCanonicalResourceSharing(resourceType)) {
       return res
         .status(200)
         .json(
-          await updateCanonicalAgentPermissions(
+          await updateCanonicalResourcePermissions(
             await loadCanonicalSharingUser(req.user),
+            resourceType,
             resourceId,
             req.body,
           ),
@@ -236,11 +237,15 @@ const getResourcePermissions = async (req, res) => {
     const { resourceType, resourceId } = req.params;
     validateResourceType(resourceType);
 
-    if (isCanonicalAgentSharing(resourceType)) {
+    if (isCanonicalResourceSharing(resourceType)) {
       return res
         .status(200)
         .json(
-          await getCanonicalAgentPermissions(await loadCanonicalSharingUser(req.user), resourceId),
+          await getCanonicalResourcePermissions(
+            await loadCanonicalSharingUser(req.user),
+            resourceType,
+            resourceId,
+          ),
         );
     }
     const tenantId = getTenantId();
@@ -389,10 +394,12 @@ const getResourceRoles = async (req, res) => {
     const { resourceType } = req.params;
     validateResourceType(resourceType);
 
-    if (isCanonicalAgentSharing(resourceType)) {
+    if (isCanonicalResourceSharing(resourceType)) {
       return res
         .status(200)
-        .json(await getCanonicalAgentRoles(await loadCanonicalSharingUser(req.user)));
+        .json(
+          await getCanonicalResourceRoles(await loadCanonicalSharingUser(req.user), resourceType),
+        );
     }
 
     const roles = await getAvailableRoles({ resourceType });
@@ -478,7 +485,7 @@ const searchPrincipals = async (req, res) => {
       typeFilters = validTypes.length > 0 ? validTypes : null;
     }
 
-    if (isCanonicalAgentSharing(resourceType)) {
+    if (isCanonicalResourceSharing(resourceType)) {
       return res.status(200).json(
         await searchCanonicalPrincipals(await loadCanonicalSharingUser(req.user), {
           query,

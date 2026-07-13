@@ -6,7 +6,12 @@ const {
   getTenantId,
   logger,
 } = require('@librechat/data-schemas');
-const { ResourceType, PrincipalType, PrincipalModel } = require('librechat-data-provider');
+const {
+  AccessRoleIds,
+  ResourceType,
+  PrincipalType,
+  PrincipalModel,
+} = require('librechat-data-provider');
 const {
   entraIdPrincipalFeatureEnabled,
   getUserOwnedEntraGroups,
@@ -23,10 +28,38 @@ const {
   hasCanonicalAgentPermission,
   listCanonicalAgentIds,
 } = require('~/models/canonicalAgents');
+const {
+  canonicalSkillsEnabled,
+  canonicalSkillPermissionBits,
+  getCanonicalSkillAccess,
+  hasCanonicalSkillPermission,
+  listCanonicalSkillIds,
+} = require('~/models/canonicalSkills');
 
-const isCanonicalAgentResource = (resourceType) =>
-  canonicalAgentsEnabled() &&
-  (resourceType === ResourceType.AGENT || resourceType === ResourceType.REMOTE_AGENT);
+const isCanonicalResource = (resourceType) =>
+  (canonicalAgentsEnabled() &&
+    (resourceType === ResourceType.AGENT || resourceType === ResourceType.REMOTE_AGENT)) ||
+  (canonicalSkillsEnabled() && resourceType === ResourceType.SKILL);
+
+const getCanonicalAccess = (user, resourceType, resourceId) =>
+  resourceType === ResourceType.SKILL
+    ? getCanonicalSkillAccess(user, resourceId)
+    : getCanonicalAgentAccess(user, resourceId);
+
+const hasCanonicalPermission = (user, resourceType, resourceId, permission, invoke = false) =>
+  resourceType === ResourceType.SKILL
+    ? hasCanonicalSkillPermission(user, resourceId, permission, invoke)
+    : hasCanonicalAgentPermission(user, resourceId, permission, invoke);
+
+const canonicalPermissionBitsFor = (resourceType, access, invoke = false) =>
+  resourceType === ResourceType.SKILL
+    ? canonicalSkillPermissionBits(access, invoke)
+    : canonicalPermissionBits(access, invoke);
+
+const listCanonicalResourceIds = (user, resourceType, permission, invoke = false) =>
+  resourceType === ResourceType.SKILL
+    ? listCanonicalSkillIds(user, permission, invoke)
+    : listCanonicalAgentIds(user, permission, invoke);
 
 const loadCanonicalPermissionUser = async (userId) => {
   // Identity assurance still comes from the transitional LibreChat auth profile.
@@ -104,6 +137,40 @@ const grantPermission = async ({
       throw new Error('Principal ID is required for user, group, and role principals');
     }
 
+    validateResourceType(resourceType);
+
+    if (canonicalSkillsEnabled() && resourceType === ResourceType.SKILL) {
+      const principalKey = principalId?.toString?.() ?? String(principalId);
+      const grantorKey = grantedBy?.toString?.() ?? String(grantedBy);
+      if (
+        principalType !== PrincipalType.USER ||
+        principalKey !== grantorKey ||
+        accessRoleId !== AccessRoleIds.SKILL_OWNER
+      ) {
+        throw new Error('Canonical skill grants must be managed through the sharing API');
+      }
+
+      // Canonical skill creation already establishes ownership in Postgres. This
+      // compatibility call verifies that invariant without writing a Mongo ACL.
+      const user = await loadCanonicalPermissionUser(grantedBy);
+      const access = await getCanonicalSkillAccess(
+        user,
+        resourceId?.toString?.() ?? String(resourceId),
+      );
+      if (access.owner !== true) {
+        throw new Error('Canonical skill owner bootstrap did not match the authenticated owner');
+      }
+      return {
+        principalType,
+        principalId,
+        resourceType,
+        resourceId,
+        accessRoleId,
+        grantedBy,
+        canonical: true,
+      };
+    }
+
     // Validate principalId based on type
     if (principalId && principalType === PrincipalType.ROLE) {
       // Role IDs are strings (role names)
@@ -122,8 +189,6 @@ const grantPermission = async ({
     if (!resourceId || !mongoose.Types.ObjectId.isValid(resourceId)) {
       throw new Error(`Invalid resource ID: ${resourceId}`);
     }
-
-    validateResourceType(resourceType);
 
     // Get the role to determine permission bits
     const role = await db.findRoleByIdentifier(accessRoleId);
@@ -171,10 +236,11 @@ const checkPermission = async ({ userId, role, resourceType, resourceId, require
 
     validateResourceType(resourceType);
 
-    if (isCanonicalAgentResource(resourceType)) {
+    if (isCanonicalResource(resourceType)) {
       const user = await loadCanonicalPermissionUser(userId);
-      return hasCanonicalAgentPermission(
+      return hasCanonicalPermission(
         user,
+        resourceType,
         resourceId?.toString?.() ?? String(resourceId),
         requiredPermission,
         resourceType === ResourceType.REMOTE_AGENT,
@@ -210,14 +276,19 @@ const getEffectivePermissions = async ({ userId, role, resourceType, resourceId 
   try {
     validateResourceType(resourceType);
 
-    if (isCanonicalAgentResource(resourceType)) {
+    if (isCanonicalResource(resourceType)) {
       const user = await loadCanonicalPermissionUser(userId);
       try {
-        const access = await getCanonicalAgentAccess(
+        const access = await getCanonicalAccess(
           user,
+          resourceType,
           resourceId?.toString?.() ?? String(resourceId),
         );
-        return canonicalPermissionBits(access, resourceType === ResourceType.REMOTE_AGENT);
+        return canonicalPermissionBitsFor(
+          resourceType,
+          access,
+          resourceType === ResourceType.REMOTE_AGENT,
+        );
       } catch (error) {
         if (error.status === 404) return 0;
         throw error;
@@ -259,15 +330,19 @@ const getResourcePermissionsMap = async ({ userId, role, resourceType, resourceI
   }
 
   try {
-    if (isCanonicalAgentResource(resourceType)) {
+    if (isCanonicalResource(resourceType)) {
       const user = await loadCanonicalPermissionUser(userId);
       const entries = await Promise.all(
         resourceIds.map(async (resourceId) => {
           try {
-            const access = await getCanonicalAgentAccess(user, resourceId.toString());
+            const access = await getCanonicalAccess(user, resourceType, resourceId.toString());
             return [
               resourceId.toString(),
-              canonicalPermissionBits(access, resourceType === ResourceType.REMOTE_AGENT),
+              canonicalPermissionBitsFor(
+                resourceType,
+                access,
+                resourceType === ResourceType.REMOTE_AGENT,
+              ),
             ];
           } catch (error) {
             if (error.status === 404) return [resourceId.toString(), 0];
@@ -308,7 +383,13 @@ const getResourcePermissionsMap = async ({ userId, role, resourceType, resourceI
  * @param {number} params.requiredPermissions - The minimum permission bits required (e.g., 1 for VIEW, 3 for VIEW+EDIT)
  * @returns {Promise<Array>} Array of resource IDs
  */
-const findAccessibleResources = async ({ userId, role, resourceType, requiredPermissions }) => {
+const findAccessibleResources = async ({
+  userId,
+  role,
+  resourceType,
+  requiredPermissions,
+  invoke = false,
+}) => {
   try {
     if (typeof requiredPermissions !== 'number' || requiredPermissions < 1) {
       throw new Error('requiredPermissions must be a positive number');
@@ -316,12 +397,13 @@ const findAccessibleResources = async ({ userId, role, resourceType, requiredPer
 
     validateResourceType(resourceType);
 
-    if (isCanonicalAgentResource(resourceType)) {
+    if (isCanonicalResource(resourceType)) {
       const user = await loadCanonicalPermissionUser(userId);
-      return listCanonicalAgentIds(
+      return listCanonicalResourceIds(
         user,
+        resourceType,
         requiredPermissions,
-        resourceType === ResourceType.REMOTE_AGENT,
+        resourceType === ResourceType.REMOTE_AGENT || invoke,
       );
     }
 
@@ -357,7 +439,7 @@ const findPubliclyAccessibleResources = async ({ resourceType, requiredPermissio
 
     validateResourceType(resourceType);
 
-    if (isCanonicalAgentResource(resourceType)) {
+    if (isCanonicalResource(resourceType)) {
       return [];
     }
 
@@ -754,7 +836,7 @@ const hasPublicPermission = async ({ resourceType, resourceId, requiredPermissio
 
     validateResourceType(resourceType);
 
-    if (isCanonicalAgentResource(resourceType)) {
+    if (isCanonicalResource(resourceType)) {
       return false;
     }
 

@@ -11,11 +11,20 @@ const {
 const { ResourceType, PermissionBits } = require('librechat-data-provider');
 const { findAccessibleResources } = require('~/server/services/PermissionService');
 const { updateUser, getUserById } = require('~/models');
+const { canonicalSkillsEnabled } = require('~/models/canonicalSkills');
 
 /** Builds the injected deps for `pruneOrphanSkillStates` from live models. */
 function buildPruneDeps(user) {
   return {
     findExistingSkillIds: async (validIds) => {
+      if (canonicalSkillsEnabled()) {
+        // The canonical accessible-ID query below is authoritative for both
+        // existence and invocation access, avoiding one API call per state key.
+        return validIds;
+      }
+      const deploymentIds = getDeploymentSkillIds()
+        .map((id) => id.toString())
+        .filter((id) => validIds.includes(id));
       const Skill = mongoose.models.Skill;
       if (!Skill) {
         return validIds;
@@ -23,9 +32,6 @@ function buildPruneDeps(user) {
       const existing = await Skill.find({ _id: { $in: validIds } })
         .select('_id')
         .lean();
-      const deploymentIds = getDeploymentSkillIds()
-        .map((id) => id.toString())
-        .filter((id) => validIds.includes(id));
       return [...existing.map((doc) => doc._id.toString()), ...deploymentIds];
     },
     findAccessibleSkillIds: async () =>
@@ -35,6 +41,7 @@ function buildPruneDeps(user) {
           role: user.role,
           resourceType: ResourceType.SKILL,
           requiredPermissions: PermissionBits.VIEW,
+          invoke: true,
         }),
       ),
   };
@@ -95,6 +102,7 @@ const updateSkillStatesController = async (req, res) => {
 };
 
 module.exports = {
+  buildPruneDeps,
   getSkillStatesController,
   updateSkillStatesController,
 };

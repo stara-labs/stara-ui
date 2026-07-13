@@ -7,6 +7,7 @@ const {
 } = require('@librechat/api');
 const { logger, runAsSystem } = require('@librechat/data-schemas');
 const db = require('~/models');
+const { canonicalSkillsEnabled } = require('~/models/canonicalSkills');
 const { getAppConfig } = require('~/server/services/Config');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { getFileStrategy } = require('~/server/utils/getFileStrategy');
@@ -16,6 +17,23 @@ const SYSTEM_USER_ID = '000000000000000000000000';
 let appConfigRef;
 let runner;
 let scheduler;
+
+const disabledRunner = Object.freeze({
+  getStatus: async () => ({
+    enabled: false,
+    intervalMinutes: 60,
+    runOnStartup: false,
+    sources: [],
+    credentials: [],
+    fineGrainedTokenRecommendation:
+      'Canonical Stara skills do not use the legacy LibreChat GitHub sync runtime.',
+  }),
+  runOnce: async () => ({
+    status: 'skipped',
+    message: 'GitHub skill sync is disabled while canonical Stara skills are enabled',
+    sources: [],
+  }),
+});
 
 async function loadCurrentAppConfig() {
   try {
@@ -171,10 +189,16 @@ const triggerOrchestrator = createSkillSyncTriggerOrchestrator({
 });
 
 function getGitHubSkillSyncRunnerForRequest(req) {
+  if (canonicalSkillsEnabled()) {
+    return disabledRunner;
+  }
   return triggerOrchestrator.getRunnerForAdminRequest(withBaseSkillSyncConfig(req, appConfigRef));
 }
 
 async function maybeRunGitHubSkillSyncForRequest(req) {
+  if (canonicalSkillsEnabled()) {
+    return false;
+  }
   const baseConfig = await loadCurrentAppConfig();
   return triggerOrchestrator.maybeRunForRequest({
     ...withBaseSkillSyncConfig(req, baseConfig),
@@ -184,6 +208,11 @@ async function maybeRunGitHubSkillSyncForRequest(req) {
 
 function initializeGitHubSkillSync(appConfig) {
   appConfigRef = appConfig;
+  if (canonicalSkillsEnabled()) {
+    stopGitHubSkillSyncScheduler();
+    runner = disabledRunner;
+    return { runner, scheduler: undefined };
+  }
   runner = createRunner();
   scheduler = startGitHubSkillSyncScheduler({
     getConfig: getSyncConfig,
@@ -193,6 +222,9 @@ function initializeGitHubSkillSync(appConfig) {
 }
 
 function getGitHubSkillSyncRunner() {
+  if (canonicalSkillsEnabled()) {
+    return disabledRunner;
+  }
   if (!runner) {
     runner = createRunner();
   }
