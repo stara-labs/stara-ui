@@ -73,6 +73,7 @@ export default function GenericGrantAccessDialog({
     publicRole,
     setPublicRole,
   } = useResourcePermissionState(resourceType, resourceDbId, isModalOpen);
+  const canUsePublicSharing = canSharePublic && permissionsData?.publicSupported !== false;
 
   /** State for unified list of all shares (existing + newly added) */
   const [allShares, setAllShares] = useState<TPrincipal[]>([]);
@@ -326,6 +327,7 @@ export default function GenericGrantAccessDialog({
                   placeholder={localize('com_ui_search_people_placeholder')}
                   typeFilter={peoplePickerTypeFilter}
                   excludeIds={allShares.map((s) => s.idOnTheSource)}
+                  resourceType={resourceType}
                 />
 
                 {/* Unified User/Group List */}
@@ -376,7 +378,7 @@ export default function GenericGrantAccessDialog({
             )}
           </div>
 
-          {canSharePublic && (
+          {canUsePublicSharing && (
             <>
               <div className="flex border-t border-border-light" />
 

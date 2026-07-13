@@ -520,7 +520,7 @@ export const memory = (key: string) => `${memories()}/${encodeURIComponent(key)}
 export const memoryPreferences = () => `${memories()}/preferences`;
 
 export const searchPrincipals = (params: q.PrincipalSearchParams) => {
-  const { q: query, limit, types } = params;
+  const { q: query, limit, types, resourceType } = params;
   let url = `${BASE_URL}/api/permissions/search-principals?q=${encodeURIComponent(query)}`;
 
   if (limit !== undefined) {
@@ -529,6 +529,10 @@ export const searchPrincipals = (params: q.PrincipalSearchParams) => {
 
   if (types && types.length > 0) {
     url += `&types=${types.join(',')}`;
+  }
+
+  if (resourceType) {
+    url += `&resourceType=${encodeURIComponent(resourceType)}`;
   }
 
   return url;

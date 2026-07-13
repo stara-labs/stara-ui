@@ -10,6 +10,10 @@ export const ROLE_LOCALIZATIONS = {
     name: 'com_ui_role_viewer' as const,
     description: 'com_ui_role_viewer_desc' as const,
   } as const,
+  agent_operator: {
+    name: 'com_ui_role_operator' as const,
+    description: 'com_ui_role_operator_desc' as const,
+  } as const,
   agent_editor: {
     name: 'com_ui_role_editor' as const,
     description: 'com_ui_role_editor_desc' as const,

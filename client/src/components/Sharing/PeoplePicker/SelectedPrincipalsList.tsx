@@ -1,7 +1,7 @@
 import React from 'react';
-import { Button, useMediaQuery } from '@librechat/client';
 import { Users, X, ExternalLink } from 'lucide-react';
 import { ResourceType } from 'librechat-data-provider';
+import { Button, useMediaQuery } from '@librechat/client';
 import type { TPrincipal, AccessRoleIds } from 'librechat-data-provider';
 import AccessRolesPicker from '~/components/Sharing/AccessRolesPicker';
 import PrincipalAvatar from '~/components/Sharing/PrincipalAvatar';
@@ -54,7 +54,7 @@ export default function SelectedPrincipalsList({
           const ownerRoleId = RESOURCE_CONFIGS[resourceType]?.defaultOwnerRoleId;
           const isOwner = share.accessRoleId === ownerRoleId;
           const isSharedLink = resourceType === ResourceType.SHARED_LINK;
-          const lockOwner = isSharedLink && isOwner;
+          const lockOwner = (isSharedLink && isOwner) || share.isCanonicalOwner === true;
           return (
             <div
               key={share.idOnTheSource + '-principalList'}

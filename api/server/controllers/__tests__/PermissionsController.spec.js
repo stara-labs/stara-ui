@@ -48,6 +48,14 @@ jest.mock('~/server/services/GraphApiService', () => ({
   searchEntraIdPrincipals: jest.fn(),
 }));
 
+jest.mock('~/server/services/CanonicalAgentSharingService', () => ({
+  getCanonicalAgentPermissions: jest.fn(),
+  getCanonicalAgentRoles: jest.fn(),
+  isCanonicalAgentSharing: jest.fn(() => false),
+  searchCanonicalPrincipals: jest.fn(),
+  updateCanonicalAgentPermissions: jest.fn(),
+}));
+
 const db = require('~/models');
 const {
   updateResourcePermissions,
