@@ -3,12 +3,15 @@ import {
   MAX_KEY_LENGTH,
   MAX_RAW_PAYLOAD,
   MAX_SKILL_STATES,
+  isValidSkillStateId,
   loadSkillStates,
   pruneOrphanSkillStates,
   resolveDefaultActiveOnShare,
   toSkillStatesRecord,
   validateSkillStatesPayload,
 } from '../skillStates';
+
+const canonicalId = '11111111-1111-4111-8111-111111111111';
 
 describe('toSkillStatesRecord', () => {
   it('converts a Mongoose Map to a plain record', () => {
@@ -50,7 +53,7 @@ describe('resolveDefaultActiveOnShare', () => {
 });
 
 describe('loadSkillStates', () => {
-  it('returns the user\u2019s stored states and the admin-configured default', async () => {
+  it('returns the user’s stored states and the admin-configured default', async () => {
     const getUserById = jest.fn().mockResolvedValue({
       skillStates: new Map([['skill-a', true]]),
     });
@@ -96,6 +99,11 @@ describe('validateSkillStatesPayload', () => {
     expect(validateSkillStatesPayload(payload)).toBeNull();
   });
 
+  it('accepts canonical UUID keys', () => {
+    expect(validateSkillStatesPayload({ [canonicalId]: true })).toBeNull();
+    expect(isValidSkillStateId(canonicalId)).toBe(true);
+  });
+
   it('accepts an empty object', () => {
     expect(validateSkillStatesPayload({})).toBeNull();
   });
@@ -134,9 +142,9 @@ describe('validateSkillStatesPayload', () => {
     expect(validateSkillStatesPayload({ [long]: true })?.message).toMatch(/non-empty string/);
   });
 
-  it('rejects keys that are not valid ObjectIds', () => {
+  it('rejects keys that are not valid skill IDs', () => {
     expect(validateSkillStatesPayload({ 'not-an-objectid': true })?.message).toMatch(
-      /valid ObjectId/,
+      /valid ObjectId or UUID/,
     );
   });
 
@@ -177,7 +185,19 @@ describe('pruneOrphanSkillStates', () => {
     expect(pruned).toEqual({ [kept]: true });
   });
 
-  it('drops malformed (non-ObjectId) keys before querying', async () => {
+  it('retains an accessible canonical UUID while pruning stale UUIDs', async () => {
+    const staleId = '22222222-2222-4222-8222-222222222222';
+    const pruned = await pruneOrphanSkillStates(
+      { [canonicalId]: true, [staleId]: false },
+      {
+        findExistingSkillIds: async (ids) => ids,
+        findAccessibleSkillIds: async () => [canonicalId],
+      },
+    );
+    expect(pruned).toEqual({ [canonicalId]: true });
+  });
+
+  it('drops malformed keys before querying', async () => {
     const kept = makeId();
     const findExistingSkillIds = jest.fn().mockResolvedValue([kept]);
     const findAccessibleSkillIds = jest.fn().mockResolvedValue([kept]);

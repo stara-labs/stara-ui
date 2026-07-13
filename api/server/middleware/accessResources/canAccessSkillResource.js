@@ -1,6 +1,8 @@
 const { ResourceType, PermissionBits } = require('librechat-data-provider');
 const { canAccessResource } = require('./canAccessResource');
+const { checkCanonicalSkillRouteAccess } = require('./canonicalSkillAccess');
 const { getSkillById } = require('~/models');
+const { canonicalSkillsEnabled } = require('~/models/canonicalSkills');
 const { getDeploymentSkillById } = require('@librechat/api');
 
 /**
@@ -31,7 +33,22 @@ const canAccessSkillResource = (options) => {
     const rawResourceId = req.params[resourceIdParam];
     const deploymentSkill = rawResourceId ? getDeploymentSkillById(rawResourceId) : null;
     if (!deploymentSkill) {
-      return aclMiddleware(req, res, next);
+      if (!canonicalSkillsEnabled()) {
+        return aclMiddleware(req, res, next);
+      }
+      if (!rawResourceId) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `${resourceIdParam} is required`,
+        });
+      }
+      return checkCanonicalSkillRouteAccess({
+        req,
+        res,
+        next,
+        skillId: rawResourceId,
+        requiredPermission,
+      });
     }
     if (requiredPermission !== PermissionBits.VIEW) {
       return res.status(403).json({

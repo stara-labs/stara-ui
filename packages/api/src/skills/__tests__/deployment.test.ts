@@ -249,12 +249,15 @@ describe('createDeploymentSkillMethods', () => {
     };
 
     const methods = createDeploymentSkillMethods(base);
-    const mergedIds = mergeDeploymentSkillIds([dbId]);
+    const canonicalId = '11111111-1111-4111-8111-111111111111';
+    const mergedIds = mergeDeploymentSkillIds([canonicalId, dbId]);
 
     expect(mergedIds.map((id) => id.toString())).toEqual([
+      canonicalId,
       dbId.toString(),
       deploymentId.toString(),
     ]);
+    expect(mergedIds[0]).toBe(canonicalId);
 
     const deploymentSkill = await methods.getSkillById(deploymentId);
     expect(deploymentSkill).toMatchObject({ name: 'analysis-kit', source: 'deployment' });
@@ -266,7 +269,7 @@ describe('createDeploymentSkillMethods', () => {
     });
     expect(listed?.skills.map((skill) => skill.name).sort()).toEqual(['analysis-kit', 'db-skill']);
     expect(base.listSkillsByAccess).toHaveBeenCalledWith({
-      accessibleIds: [dbId],
+      accessibleIds: [canonicalId, dbId],
       limit: 10,
     });
 
@@ -279,9 +282,24 @@ describe('createDeploymentSkillMethods', () => {
       'db-always',
     ]);
     expect(base.listAlwaysApplySkills).toHaveBeenCalledWith({
-      accessibleIds: [dbId],
+      accessibleIds: [canonicalId, dbId],
       limit: 10,
     });
+
+    const canonicalCursor = Buffer.from(
+      JSON.stringify({ updatedAt: new Date(0).toISOString(), _id: canonicalId }),
+    ).toString('base64');
+    (base.listSkillsByAccess as jest.Mock).mockResolvedValueOnce({
+      skills: [],
+      has_more: false,
+      after: null,
+    });
+    const afterCanonicalCursor = await methods.listSkillsByAccess?.({
+      accessibleIds: mergedIds,
+      limit: 10,
+      cursor: canonicalCursor,
+    });
+    expect(afterCanonicalCursor?.skills).toEqual([]);
 
     const files = await methods.listSkillFiles?.(deploymentId);
     expect(files?.map((file) => file.relativePath).sort()).toEqual([

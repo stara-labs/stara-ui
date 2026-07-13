@@ -3,12 +3,17 @@ const mockGetStrategyFunctions = jest.fn();
 const mockGetFileStrategy = jest.fn();
 const mockFindRoleByIdentifier = jest.fn();
 const mockGrantPermission = jest.fn();
+const mockCanonicalSkillsEnabled = jest.fn();
 let mockRunnerDeps;
 let mockRunnerStatus;
 const mockCreatedRunners = [];
 
 jest.mock('~/server/services/Config', () => ({
   getAppConfig: mockGetAppConfig,
+}));
+
+jest.mock('~/models/canonicalSkills', () => ({
+  canonicalSkillsEnabled: () => mockCanonicalSkillsEnabled(),
 }));
 
 jest.mock('@librechat/api', () => {
@@ -100,9 +105,44 @@ describe('GitHub skill sync service', () => {
     mockGetFileStrategy.mockReset();
     mockFindRoleByIdentifier.mockReset();
     mockGrantPermission.mockReset();
+    mockCanonicalSkillsEnabled.mockReturnValue(false);
     mockRunnerDeps = undefined;
     mockRunnerStatus = undefined;
     mockCreatedRunners.length = 0;
+  });
+
+  it('disables legacy GitHub sync without creating a Mongo-backed runner', async () => {
+    mockCanonicalSkillsEnabled.mockReturnValue(true);
+    const {
+      createGitHubSkillSyncRunner,
+      startGitHubSkillSyncScheduler,
+    } = require('@librechat/api');
+    const service = require('./sync');
+
+    const initialized = service.initializeGitHubSkillSync({
+      skillSync: { github: { enabled: true, runOnStartup: true, sources: [{}] } },
+    });
+    const requestRunner = service.getGitHubSkillSyncRunnerForRequest({
+      user: { id: 'user-1', tenantId: 'tenant-a' },
+      config: {},
+    });
+
+    await expect(service.maybeRunGitHubSkillSyncForRequest({})).resolves.toBe(false);
+    await expect(requestRunner.getStatus()).resolves.toMatchObject({
+      enabled: false,
+      sources: [],
+      credentials: [],
+    });
+    await expect(requestRunner.runOnce()).resolves.toEqual({
+      status: 'skipped',
+      message: 'GitHub skill sync is disabled while canonical Stara skills are enabled',
+      sources: [],
+    });
+    expect(initialized.runner).toBe(requestRunner);
+    expect(initialized.scheduler).toBeUndefined();
+    expect(createGitHubSkillSyncRunner).not.toHaveBeenCalled();
+    expect(startGitHubSkillSyncScheduler).not.toHaveBeenCalled();
+    expect(mockGetAppConfig).not.toHaveBeenCalled();
   });
 
   it('resolves sync config from fresh base app config for runner operations', async () => {

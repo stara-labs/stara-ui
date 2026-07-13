@@ -177,6 +177,7 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
           role: req.user.role,
           resourceType: ResourceType.SKILL,
           requiredPermissions: PermissionBits.VIEW,
+          invoke: true,
         }),
       )
     : [];

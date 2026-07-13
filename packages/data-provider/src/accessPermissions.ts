@@ -83,6 +83,7 @@ export enum AccessRoleIds {
   REMOTE_AGENT_EDITOR = 'remoteAgent_editor',
   REMOTE_AGENT_OWNER = 'remoteAgent_owner',
   SKILL_VIEWER = 'skill_viewer',
+  SKILL_OPERATOR = 'skill_operator',
   SKILL_EDITOR = 'skill_editor',
   SKILL_OWNER = 'skill_owner',
   SHARED_LINK_VIEWER = 'sharedLink_viewer',
@@ -330,6 +331,7 @@ export function accessRoleToPermBits(accessRoleId: string): number {
     case AccessRoleIds.MCPSERVER_VIEWER:
     case AccessRoleIds.REMOTE_AGENT_VIEWER:
     case AccessRoleIds.SKILL_VIEWER:
+    case AccessRoleIds.SKILL_OPERATOR:
     case AccessRoleIds.SHARED_LINK_VIEWER:
       return PermissionBits.VIEW;
     case AccessRoleIds.AGENT_EDITOR:

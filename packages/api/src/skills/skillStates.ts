@@ -10,6 +10,7 @@ export const MAX_KEY_LENGTH = 64;
  * we spend cycles validating or querying the DB for orphan cleanup.
  */
 export const MAX_RAW_PAYLOAD: number = MAX_SKILL_STATES * 2;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Map of skillId → explicit active state override. */
 export type SkillStatesRecord = Record<string, boolean>;
@@ -91,7 +92,7 @@ export interface SkillStatesValidationError {
  * reason. Caller maps the error to an HTTP 400 response.
  *
  * Rejects: non-object payloads, oversize payloads (sanity bound for abuse),
- * non-string/empty/oversize keys, keys that are not valid ObjectIds, and
+ * non-string/empty/oversize keys, keys that are not valid ObjectIds or UUIDs, and
  * non-boolean values. The strict 200-entry cap is enforced *after* orphan
  * pruning, not here, so stale-client payloads near the cap do not get a
  * false-positive rejection.
@@ -114,8 +115,8 @@ export function validateSkillStatesPayload(payload: unknown): SkillStatesValidat
         message: `Each skill ID must be a non-empty string (max ${MAX_KEY_LENGTH} chars)`,
       };
     }
-    if (!isValidObjectIdString(key)) {
-      return { message: 'Each skill ID must be a valid ObjectId' };
+    if (!isValidSkillStateId(key)) {
+      return { message: 'Each skill ID must be a valid ObjectId or UUID' };
     }
     if (typeof value !== 'boolean') {
       return { message: 'Each skill state value must be a boolean' };
@@ -132,8 +133,8 @@ export interface PruneOrphansDeps {
 }
 
 /**
- * Returns a copy of `skillStates` containing only entries that: are valid
- * ObjectIds, point to a Skill that currently exists, AND the user still has
+ * Returns a copy of `skillStates` containing only entries that are valid skill
+ * IDs, point to a Skill that currently exists, AND the user still has
  * VIEW access to. Self-heals three classes of orphan without cascade logic:
  * malformed keys, deleted skills, and revoked shares.
  *
@@ -144,7 +145,7 @@ export async function pruneOrphanSkillStates(
   skillStates: SkillStatesRecord,
   deps: PruneOrphansDeps,
 ): Promise<SkillStatesRecord> {
-  const validIds = Object.keys(skillStates).filter((id) => isValidObjectIdString(id));
+  const validIds = Object.keys(skillStates).filter(isValidSkillStateId);
   if (validIds.length === 0) {
     return {};
   }
@@ -161,4 +162,8 @@ export async function pruneOrphanSkillStates(
     }
   }
   return pruned;
+}
+
+export function isValidSkillStateId(value: string): boolean {
+  return isValidObjectIdString(value) || UUID_PATTERN.test(value);
 }

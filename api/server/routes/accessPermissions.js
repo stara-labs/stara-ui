@@ -21,12 +21,12 @@ const {
 const { requireJwtAuth, checkBan, uaParser, canAccessResource } = require('~/server/middleware');
 const { checkPeoplePickerAccess } = require('~/server/middleware/checkPeoplePickerAccess');
 const { findMCPServerByObjectId, getSkillById } = require('~/models');
-const { canonicalAgentsEnabled } = require('~/models/canonicalAgents');
+const { isCanonicalResourceSharing } = require('~/server/services/CanonicalResourceSharingService');
 
 const router = express.Router();
 
-const skipLegacySharePolicyForCanonicalAgent = (middleware) => (req, res, next) => {
-  if (canonicalAgentsEnabled() && req.params.resourceType === ResourceType.AGENT) {
+const skipLegacySharePolicyForCanonicalResource = (middleware) => (req, res, next) => {
+  if (isCanonicalResourceSharing(req.params.resourceType)) {
     return next();
   }
   return middleware(req, res, next);
@@ -184,8 +184,8 @@ router.get(
 router.put(
   '/:resourceType/:resourceId',
   checkResourcePermissionAccess(PermissionBits.SHARE),
-  skipLegacySharePolicyForCanonicalAgent(checkShareAccess),
-  skipLegacySharePolicyForCanonicalAgent(checkSharePublicAccess),
+  skipLegacySharePolicyForCanonicalResource(checkShareAccess),
+  skipLegacySharePolicyForCanonicalResource(checkSharePublicAccess),
   rejectSharedLinkOwnerPermissionChanges,
   updateResourcePermissions,
 );
