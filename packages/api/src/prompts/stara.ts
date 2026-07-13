@@ -298,7 +298,6 @@ export function createStaraPromptMethods(
           200,
         ) ?? 'Prompt owner',
       isPublic: false,
-      tenantId: prompt.tenant_id,
       createdAt: new Date(prompt.created_at),
       updatedAt: new Date(prompt.updated_at),
     };
@@ -610,8 +609,13 @@ function normalizeLimit(value: string | number | undefined, fallback: number): n
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.floor(parsed), 100) : fallback;
 }
 
-function httpStatus(error: object): number | undefined {
-  return 'status' in error && typeof error.status === 'number' ? error.status : undefined;
+function httpStatus(error: unknown): number | undefined {
+  return typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof error.status === 'number'
+    ? error.status
+    : undefined;
 }
 
 function httpError(message: string, status: number): Error & { status: number } {

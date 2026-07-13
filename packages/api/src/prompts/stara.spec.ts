@@ -1,5 +1,5 @@
 import { PermissionBits } from 'librechat-data-provider';
-import type { StaraPromptRequest, StaraPromptUser } from './stara';
+import type { StaraPromptRequest, StaraPromptRequestOptions, StaraPromptUser } from './stara';
 import {
   canonicalPromptPermissionBits,
   canonicalPromptsEnabled,
@@ -53,7 +53,7 @@ describe('Stara canonical prompt adapter', () => {
     const request: StaraPromptRequest = async <TResponse>(
       _user: StaraPromptUser,
       path: string,
-      options = {},
+      options: StaraPromptRequestOptions = {},
     ): Promise<TResponse> => {
       const method = options.method ?? 'GET';
       calls.push({ path, method, ...(options.body ? { body: options.body } : {}) });

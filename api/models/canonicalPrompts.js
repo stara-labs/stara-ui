@@ -2,14 +2,23 @@ const { getUserId: getContextUserId } = require('@librechat/data-schemas');
 const {
   canonicalPromptId,
   canonicalPromptPermissionBits,
-  canonicalPromptsEnabled: promptsEnabled,
   createStaraPromptMethods,
   requiredCanonicalPromptPermissions,
 } = require('@librechat/api');
 const { PermissionBits } = require('librechat-data-provider');
 const { callStaraApi, getUserId, safeString } = require('~/server/services/StaraServiceClient');
 
-const canonicalPromptsEnabled = () => promptsEnabled(process.env);
+const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
+
+const canonicalPromptsEnabled = () => {
+  const explicit = process.env.STARA_CANONICAL_PROMPTS;
+  const value = explicit == null ? process.env.STARA_CANONICAL_WORKSPACE : explicit;
+  return TRUE_VALUES.has(
+    String(value ?? '')
+      .trim()
+      .toLowerCase(),
+  );
+};
 
 const createCanonicalPromptMethods = (baseMethods) => {
   if (!canonicalPromptsEnabled()) {
