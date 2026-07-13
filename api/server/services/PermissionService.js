@@ -35,31 +35,59 @@ const {
   hasCanonicalSkillPermission,
   listCanonicalSkillIds,
 } = require('~/models/canonicalSkills');
+const {
+  canonicalPromptPermissionBits,
+  canonicalPromptsEnabled,
+  getCanonicalPromptAccess,
+  hasCanonicalPromptPermission,
+  listCanonicalPromptIds,
+} = require('~/models/canonicalPrompts');
 
 const isCanonicalResource = (resourceType) =>
   (canonicalAgentsEnabled() &&
     (resourceType === ResourceType.AGENT || resourceType === ResourceType.REMOTE_AGENT)) ||
-  (canonicalSkillsEnabled() && resourceType === ResourceType.SKILL);
+  (canonicalSkillsEnabled() && resourceType === ResourceType.SKILL) ||
+  (canonicalPromptsEnabled() && resourceType === ResourceType.PROMPTGROUP);
 
-const getCanonicalAccess = (user, resourceType, resourceId) =>
-  resourceType === ResourceType.SKILL
-    ? getCanonicalSkillAccess(user, resourceId)
-    : getCanonicalAgentAccess(user, resourceId);
+const getCanonicalAccess = (user, resourceType, resourceId) => {
+  if (resourceType === ResourceType.PROMPTGROUP) {
+    return getCanonicalPromptAccess(user, resourceId);
+  }
+  if (resourceType === ResourceType.SKILL) {
+    return getCanonicalSkillAccess(user, resourceId);
+  }
+  return getCanonicalAgentAccess(user, resourceId);
+};
 
-const hasCanonicalPermission = (user, resourceType, resourceId, permission, invoke = false) =>
-  resourceType === ResourceType.SKILL
-    ? hasCanonicalSkillPermission(user, resourceId, permission, invoke)
-    : hasCanonicalAgentPermission(user, resourceId, permission, invoke);
+const hasCanonicalPermission = (user, resourceType, resourceId, permission, invoke = false) => {
+  if (resourceType === ResourceType.PROMPTGROUP) {
+    return hasCanonicalPromptPermission(user, resourceId, permission, invoke);
+  }
+  if (resourceType === ResourceType.SKILL) {
+    return hasCanonicalSkillPermission(user, resourceId, permission, invoke);
+  }
+  return hasCanonicalAgentPermission(user, resourceId, permission, invoke);
+};
 
-const canonicalPermissionBitsFor = (resourceType, access, invoke = false) =>
-  resourceType === ResourceType.SKILL
-    ? canonicalSkillPermissionBits(access, invoke)
-    : canonicalPermissionBits(access, invoke);
+const canonicalPermissionBitsFor = (resourceType, access, invoke = false) => {
+  if (resourceType === ResourceType.PROMPTGROUP) {
+    return canonicalPromptPermissionBits(access, invoke);
+  }
+  if (resourceType === ResourceType.SKILL) {
+    return canonicalSkillPermissionBits(access, invoke);
+  }
+  return canonicalPermissionBits(access, invoke);
+};
 
-const listCanonicalResourceIds = (user, resourceType, permission, invoke = false) =>
-  resourceType === ResourceType.SKILL
-    ? listCanonicalSkillIds(user, permission, invoke)
-    : listCanonicalAgentIds(user, permission, invoke);
+const listCanonicalResourceIds = (user, resourceType, permission, invoke = false) => {
+  if (resourceType === ResourceType.PROMPTGROUP) {
+    return listCanonicalPromptIds(user, permission, invoke);
+  }
+  if (resourceType === ResourceType.SKILL) {
+    return listCanonicalSkillIds(user, permission, invoke);
+  }
+  return listCanonicalAgentIds(user, permission, invoke);
+};
 
 const loadCanonicalPermissionUser = async (userId) => {
   // Identity assurance still comes from the transitional LibreChat auth profile.
@@ -159,6 +187,36 @@ const grantPermission = async ({
       );
       if (access.owner !== true) {
         throw new Error('Canonical skill owner bootstrap did not match the authenticated owner');
+      }
+      return {
+        principalType,
+        principalId,
+        resourceType,
+        resourceId,
+        accessRoleId,
+        grantedBy,
+        canonical: true,
+      };
+    }
+
+    if (canonicalPromptsEnabled() && resourceType === ResourceType.PROMPTGROUP) {
+      const principalKey = principalId?.toString?.() ?? String(principalId);
+      const grantorKey = grantedBy?.toString?.() ?? String(grantedBy);
+      if (
+        principalType !== PrincipalType.USER ||
+        principalKey !== grantorKey ||
+        accessRoleId !== AccessRoleIds.PROMPTGROUP_OWNER
+      ) {
+        throw new Error('Canonical prompt grants must be managed through the sharing API');
+      }
+
+      const user = await loadCanonicalPermissionUser(grantedBy);
+      const access = await getCanonicalPromptAccess(
+        user,
+        resourceId?.toString?.() ?? String(resourceId),
+      );
+      if (access.owner !== true) {
+        throw new Error('Canonical prompt owner bootstrap did not match the authenticated owner');
       }
       return {
         principalType,

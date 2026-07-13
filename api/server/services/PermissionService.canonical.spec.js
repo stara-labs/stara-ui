@@ -28,6 +28,17 @@ jest.mock('~/models/canonicalSkills', () => ({
   listCanonicalSkillIds: jest.fn().mockResolvedValue(['22222222-2222-4222-8222-222222222222']),
 }));
 
+jest.mock('~/models/canonicalPrompts', () => ({
+  canonicalPromptsEnabled: jest.fn(() => true),
+  canonicalPromptPermissionBits: jest.fn(() => 15),
+  getCanonicalPromptAccess: jest.fn().mockResolvedValue({
+    owner: true,
+    permissions: ['prompt.read', 'prompt.use', 'prompt.edit', 'prompt.share', 'prompt.delete'],
+  }),
+  hasCanonicalPromptPermission: jest.fn().mockResolvedValue(true),
+  listCanonicalPromptIds: jest.fn().mockResolvedValue(['33333333-3333-4333-8333-333333333333']),
+}));
+
 jest.mock('~/server/services/GraphApiService', () => ({}));
 
 const {
@@ -42,6 +53,11 @@ const {
   listCanonicalAgentIds,
 } = require('~/models/canonicalAgents');
 const { getCanonicalSkillAccess, listCanonicalSkillIds } = require('~/models/canonicalSkills');
+const {
+  getCanonicalPromptAccess,
+  hasCanonicalPromptPermission,
+  listCanonicalPromptIds,
+} = require('~/models/canonicalPrompts');
 const {
   checkPermission,
   findAccessibleResources,
@@ -161,5 +177,62 @@ describe('PermissionService canonical agents', () => {
         grantedBy: 'user_maya',
       }),
     ).rejects.toThrow('Canonical skill grants must be managed through the sharing API');
+  });
+
+  it('routes prompt visibility, use, and effective permissions through Stara', async () => {
+    const promptId = '33333333-3333-4333-8333-333333333333';
+    await expect(
+      findAccessibleResources({
+        userId: 'user_maya',
+        resourceType: ResourceType.PROMPTGROUP,
+        requiredPermissions: PermissionBits.VIEW,
+      }),
+    ).resolves.toEqual([promptId]);
+    expect(listCanonicalPromptIds).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user_maya' }),
+      PermissionBits.VIEW,
+      false,
+    );
+
+    await expect(
+      checkPermission({
+        userId: 'user_maya',
+        resourceType: ResourceType.PROMPTGROUP,
+        resourceId: promptId,
+        requiredPermission: PermissionBits.EDIT,
+      }),
+    ).resolves.toBe(true);
+    expect(hasCanonicalPromptPermission).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user_maya' }),
+      promptId,
+      PermissionBits.EDIT,
+      false,
+    );
+
+    await expect(
+      getEffectivePermissions({
+        userId: 'user_maya',
+        resourceType: ResourceType.PROMPTGROUP,
+        resourceId: promptId,
+      }),
+    ).resolves.toBe(15);
+  });
+
+  it('verifies canonical prompt ownership without creating a Mongo ACL', async () => {
+    const promptId = '33333333-3333-4333-8333-333333333333';
+    await expect(
+      grantPermission({
+        principalType: PrincipalType.USER,
+        principalId: 'user_maya',
+        resourceType: ResourceType.PROMPTGROUP,
+        resourceId: promptId,
+        accessRoleId: AccessRoleIds.PROMPTGROUP_OWNER,
+        grantedBy: 'user_maya',
+      }),
+    ).resolves.toMatchObject({ canonical: true, resourceId: promptId });
+    expect(getCanonicalPromptAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user_maya' }),
+      promptId,
+    );
   });
 });

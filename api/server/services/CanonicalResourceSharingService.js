@@ -5,6 +5,7 @@ const {
   ResourceType,
 } = require('librechat-data-provider');
 const { canonicalAgentId, canonicalAgentsEnabled } = require('~/models/canonicalAgents');
+const { canonicalPromptId, canonicalPromptsEnabled } = require('~/models/canonicalPrompts');
 const { canonicalSkillId, canonicalSkillsEnabled } = require('~/models/canonicalSkills');
 const { callStaraApi, safeString } = require('~/server/services/StaraServiceClient');
 
@@ -13,6 +14,7 @@ const RESOURCE_CONFIG = {
     enabled: canonicalAgentsEnabled,
     canonicalId: canonicalAgentId,
     apiCollection: 'agents',
+    apiResourceType: 'agent',
     responseKey: 'agent',
     permissionPrefix: 'agent',
     roleIds: {
@@ -26,6 +28,7 @@ const RESOURCE_CONFIG = {
     enabled: canonicalSkillsEnabled,
     canonicalId: canonicalSkillId,
     apiCollection: 'skills',
+    apiResourceType: 'skill',
     responseKey: 'skill',
     permissionPrefix: 'skill',
     roleIds: {
@@ -33,6 +36,20 @@ const RESOURCE_CONFIG = {
       operator: AccessRoleIds.SKILL_OPERATOR,
       editor: AccessRoleIds.SKILL_EDITOR,
       owner: AccessRoleIds.SKILL_OWNER,
+    },
+  },
+  [ResourceType.PROMPTGROUP]: {
+    enabled: canonicalPromptsEnabled,
+    canonicalId: canonicalPromptId,
+    apiCollection: 'prompts',
+    apiResourceType: 'prompt',
+    responseKey: 'prompt',
+    permissionPrefix: 'prompt',
+    roleIds: {
+      viewer: AccessRoleIds.PROMPTGROUP_VIEWER,
+      operator: AccessRoleIds.PROMPTGROUP_OPERATOR,
+      editor: AccessRoleIds.PROMPTGROUP_EDITOR,
+      owner: AccessRoleIds.PROMPTGROUP_OWNER,
     },
   },
 };
@@ -46,7 +63,7 @@ const getCanonicalResourceRoles = async (user, resourceType) => {
   const config = requireConfig(resourceType);
   const response = await request(
     user,
-    `/v1/access/roles?resource_type=${encodeURIComponent(resourceType)}`,
+    `/v1/access/roles?resource_type=${encodeURIComponent(config.apiResourceType)}`,
   );
   return (response.roles ?? []).map((role) => ({
     accessRoleId: requireRoleId(config, role.role_key),

@@ -74,6 +74,7 @@ export enum AccessRoleIds {
   AGENT_EDITOR = 'agent_editor',
   AGENT_OWNER = 'agent_owner',
   PROMPTGROUP_VIEWER = 'promptGroup_viewer',
+  PROMPTGROUP_OPERATOR = 'promptGroup_operator',
   PROMPTGROUP_EDITOR = 'promptGroup_editor',
   PROMPTGROUP_OWNER = 'promptGroup_owner',
   MCPSERVER_VIEWER = 'mcpServer_viewer',
@@ -328,6 +329,7 @@ export function accessRoleToPermBits(accessRoleId: string): number {
     case AccessRoleIds.AGENT_VIEWER:
     case AccessRoleIds.AGENT_OPERATOR:
     case AccessRoleIds.PROMPTGROUP_VIEWER:
+    case AccessRoleIds.PROMPTGROUP_OPERATOR:
     case AccessRoleIds.MCPSERVER_VIEWER:
     case AccessRoleIds.REMOTE_AGENT_VIEWER:
     case AccessRoleIds.SKILL_VIEWER:
