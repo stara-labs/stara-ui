@@ -1,5 +1,9 @@
 const { logger } = require('@librechat/data-schemas');
 const { getUserById } = require('~/models');
+const {
+  getCanonicalRequestUser,
+  isCanonicalIdentityContextEnabled,
+} = require('~/server/services/StaraApiClient');
 
 const assuranceError = (assurance) => ({
   code: 'stara_assurance_required',
@@ -17,6 +21,10 @@ const loadAssuranceUser = async (requestUser) => {
   const id = userId(requestUser);
   if (!id) {
     return requestUser;
+  }
+
+  if (isCanonicalIdentityContextEnabled()) {
+    return getCanonicalRequestUser(id);
   }
 
   try {

@@ -49,6 +49,7 @@ const mockRedirectToAuthFailure = jest.fn((res, { clientDomain, authFailedError 
   res.redirect(`${clientDomain}/login?redirect=false&error=${authFailedError}`),
 );
 const mockPassportAuthenticate = jest.fn(() => (_req, _res, next) => next());
+let mockIdentityPlatformAuthEnabled = false;
 
 jest.mock('passport', () => ({
   authenticate: (...args) => mockPassportAuthenticate(...args),
@@ -96,6 +97,10 @@ jest.mock('~/server/services/Config', () => ({
   getAppConfig: jest.fn(),
 }));
 
+jest.mock('~/server/services/IdentityPlatformService', () => ({
+  identityPlatformAuthEnabled: () => mockIdentityPlatformAuthEnabled,
+}));
+
 afterAll(() => {
   if (originalDomainClient === undefined) {
     delete process.env.DOMAIN_CLIENT;
@@ -136,6 +141,7 @@ describe('OAuth route failure logging', () => {
     mockGetOAuthFailureMessage.mockClear();
     mockRedirectToAuthFailure.mockClear();
     mockPassportAuthenticate.mockClear();
+    mockIdentityPlatformAuthEnabled = false;
     mockOpenIDCallbackAuthenticatorOptions = undefined;
     mockPassportAuthenticate.mockImplementation(() => (_req, _res, next) => next());
     mockOpenIDCallbackMiddleware.mockImplementation((_req, _res, next) => next());
@@ -160,6 +166,18 @@ describe('OAuth route failure logging', () => {
       expect.any(Function),
     );
     expect(mockOAuthHandler).toHaveBeenCalled();
+  });
+
+  it('retires inherited OAuth session issuance after the Identity Platform cutover', async () => {
+    mockIdentityPlatformAuthEnabled = true;
+    const app = createApp();
+
+    const response = await request(app).get('/oauth/google').expect(410);
+
+    expect(response.body).toEqual({
+      error: 'identity_platform_auth_required',
+      message: 'This authentication operation is managed by Google Identity Platform.',
+    });
   });
 
   it('logs structured fallback errors without using Unknown OAuth error', async () => {

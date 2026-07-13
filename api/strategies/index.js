@@ -14,6 +14,7 @@ const appleLogin = require('./appleStrategy');
 const { appleAdminLogin } = appleLogin;
 const ldapLogin = require('./ldapStrategy');
 const jwtLogin = require('./jwtStrategy');
+const identityPlatformLogin = require('./identityPlatformStrategy');
 
 module.exports = {
   appleLogin,
@@ -26,6 +27,7 @@ module.exports = {
   discordLogin,
   discordAdminLogin,
   jwtLogin,
+  identityPlatformLogin,
   facebookLogin,
   facebookAdminLogin,
   setupOpenId,

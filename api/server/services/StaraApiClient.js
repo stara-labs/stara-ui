@@ -22,6 +22,9 @@ const requireStaraUser = (user) => {
 const envEnabled = (value) => /^(1|true|yes|on)$/i.test(String(value ?? '').trim());
 
 const isCanonicalIdentityContextEnabled = () => {
+  if (envEnabled(process.env.STARA_IDENTITY_PLATFORM_AUTH)) {
+    return true;
+  }
   const explicit = process.env.STARA_CANONICAL_IDENTITY_CONTEXT;
   return explicit == null
     ? envEnabled(process.env.STARA_CANONICAL_WORKSPACE)

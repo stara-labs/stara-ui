@@ -32,7 +32,8 @@ const { capabilityContextMiddleware } = require('./middleware/roles/capabilities
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { startExpiredFileSweep } = require('./services/Files/process');
 const { initializeGitHubSkillSync } = require('./services/Skills/sync');
-const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
+const { identityPlatformLogin, jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
+const { identityPlatformAuthEnabled } = require('~/server/services/IdentityPlatformService');
 const { updateInterfacePermissions: updateInterfacePerms } = require('@librechat/api');
 const {
   getRoleByName,
@@ -411,6 +412,9 @@ if (cluster.isMaster) {
 
     /** OAUTH */
     app.use(passport.initialize());
+    if (identityPlatformAuthEnabled()) {
+      passport.use(identityPlatformLogin());
+    }
     passport.use(jwtLogin());
     passport.use(passportLogin());
 

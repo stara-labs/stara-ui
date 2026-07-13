@@ -11,6 +11,7 @@ const {
 const originalApiUrl = process.env.STARA_API_URL;
 const originalCanonicalIdentity = process.env.STARA_CANONICAL_IDENTITY_CONTEXT;
 const originalCanonicalWorkspace = process.env.STARA_CANONICAL_WORKSPACE;
+const originalIdentityPlatformAuth = process.env.STARA_IDENTITY_PLATFORM_AUTH;
 
 describe('StaraApiClient canonical request identity', () => {
   beforeEach(() => {
@@ -18,12 +19,14 @@ describe('StaraApiClient canonical request identity', () => {
     process.env.STARA_API_URL = 'http://stara-api:3081';
     process.env.STARA_CANONICAL_IDENTITY_CONTEXT = 'true';
     delete process.env.STARA_CANONICAL_WORKSPACE;
+    delete process.env.STARA_IDENTITY_PLATFORM_AUTH;
   });
 
   afterAll(() => {
     restoreEnv('STARA_API_URL', originalApiUrl);
     restoreEnv('STARA_CANONICAL_IDENTITY_CONTEXT', originalCanonicalIdentity);
     restoreEnv('STARA_CANONICAL_WORKSPACE', originalCanonicalWorkspace);
+    restoreEnv('STARA_IDENTITY_PLATFORM_AUTH', originalIdentityPlatformAuth);
   });
 
   it('replaces a stale compatibility tenant with the active Postgres membership in request memory', async () => {
@@ -80,6 +83,13 @@ describe('StaraApiClient canonical request identity', () => {
     const user = makeUser({ tenantId: 'legacy-only' });
     await expect(resolveCanonicalRequestUser(user)).resolves.toBe(user);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('always enables canonical request identity for Identity Platform auth', () => {
+    process.env.STARA_CANONICAL_IDENTITY_CONTEXT = 'false';
+    process.env.STARA_IDENTITY_PLATFORM_AUTH = 'true';
+
+    expect(isCanonicalIdentityContextEnabled()).toBe(true);
   });
 
   it('provides an isolated request actor and rejects actor mismatches', async () => {

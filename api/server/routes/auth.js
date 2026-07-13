@@ -20,6 +20,8 @@ const { loginController } = require('~/server/controllers/auth/LoginController')
 const { findBalanceByUser, upsertBalanceFields } = require('~/models');
 const { getAppConfig } = require('~/server/services/Config');
 const middleware = require('~/server/middleware');
+const requireLegacyAuthMode = require('~/server/middleware/requireLegacyAuthMode');
+const { identityPlatformAuthEnabled } = require('~/server/services/IdentityPlatformService');
 
 const setBalanceConfig = createSetBalanceConfig({
   getAppConfig,
@@ -39,9 +41,15 @@ const getCloudFrontAuthCookieRefreshResult = (req, res) => {
 
 const ldapAuth = !!process.env.LDAP_URL && !!process.env.LDAP_USER_SEARCH_BASE;
 //Local
-router.post('/logout', middleware.requireJwtAuth, logoutController);
+router.post('/logout', middleware.requireJwtAuth, (req, res, next) => {
+  if (identityPlatformAuthEnabled()) {
+    return res.status(204).end();
+  }
+  return logoutController(req, res, next);
+});
 router.post(
   '/login',
+  requireLegacyAuthMode,
   middleware.logHeaders,
   middleware.loginLimiter,
   middleware.checkBan,
@@ -49,7 +57,7 @@ router.post(
   setBalanceConfig,
   loginController,
 );
-router.post('/refresh', refreshController);
+router.post('/refresh', requireLegacyAuthMode, refreshController);
 router.post('/cloudfront/refresh', middleware.requireJwtAuth, (req, res) => {
   const result = getCloudFrontAuthCookieRefreshResult(req, res);
   if (!result.enabled) {
@@ -65,6 +73,7 @@ router.post('/cloudfront/refresh', middleware.requireJwtAuth, (req, res) => {
 });
 router.post(
   '/register',
+  requireLegacyAuthMode,
   middleware.registerLimiter,
   middleware.checkBan,
   middleware.checkInviteUser,
@@ -73,6 +82,7 @@ router.post(
 );
 router.post(
   '/requestPasswordReset',
+  requireLegacyAuthMode,
   middleware.resetPasswordLimiter,
   middleware.checkBan,
   middleware.validatePasswordReset,
@@ -80,24 +90,31 @@ router.post(
 );
 router.post(
   '/resetPassword',
+  requireLegacyAuthMode,
   middleware.resetPasswordSubmissionLimiter,
   middleware.checkBan,
   middleware.validatePasswordReset,
   resetPasswordController,
 );
 
-router.post('/2fa/enable', middleware.requireJwtAuth, enable2FA);
-router.post('/2fa/verify', middleware.requireJwtAuth, verify2FA);
+router.post('/2fa/enable', requireLegacyAuthMode, middleware.requireJwtAuth, enable2FA);
+router.post('/2fa/verify', requireLegacyAuthMode, middleware.requireJwtAuth, verify2FA);
 router.post(
   '/2fa/verify-temp',
+  requireLegacyAuthMode,
   middleware.setTwoFactorTempUser,
   middleware.twoFactorTempLimiter,
   middleware.checkBan,
   verify2FAWithTempToken,
 );
-router.post('/2fa/confirm', middleware.requireJwtAuth, confirm2FA);
-router.post('/2fa/disable', middleware.requireJwtAuth, disable2FA);
-router.post('/2fa/backup/regenerate', middleware.requireJwtAuth, regenerateBackupCodes);
+router.post('/2fa/confirm', requireLegacyAuthMode, middleware.requireJwtAuth, confirm2FA);
+router.post('/2fa/disable', requireLegacyAuthMode, middleware.requireJwtAuth, disable2FA);
+router.post(
+  '/2fa/backup/regenerate',
+  requireLegacyAuthMode,
+  middleware.requireJwtAuth,
+  regenerateBackupCodes,
+);
 
 router.get('/graph-token', middleware.requireJwtAuth, graphTokenController);
 

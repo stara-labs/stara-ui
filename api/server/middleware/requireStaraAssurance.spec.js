@@ -1,14 +1,39 @@
 const mockLogger = { warn: jest.fn() };
 const mockGetUserById = jest.fn();
+const mockGetCanonicalRequestUser = jest.fn();
+let mockCanonicalIdentityEnabled = false;
 
 jest.mock('@librechat/data-schemas', () => ({ logger: mockLogger }));
 jest.mock('~/models', () => ({ getUserById: mockGetUserById }));
+jest.mock('~/server/services/StaraApiClient', () => ({
+  getCanonicalRequestUser: (...args) => mockGetCanonicalRequestUser(...args),
+  isCanonicalIdentityContextEnabled: () => mockCanonicalIdentityEnabled,
+}));
 
 const requireStaraAssurance = require('./requireStaraAssurance');
 
 describe('requireStaraAssurance', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCanonicalIdentityEnabled = false;
+  });
+
+  it('uses the verified canonical request principal without refreshing Mongo assurance', async () => {
+    mockCanonicalIdentityEnabled = true;
+    mockGetCanonicalRequestUser.mockReturnValue({
+      id: 'identity-user-1',
+      emailVerified: true,
+      twoFactorEnabled: true,
+    });
+    const req = { user: { id: 'identity-user-1' } };
+    const res = response();
+    const next = jest.fn();
+
+    await requireStaraAssurance(req, res, next);
+
+    expect(mockGetCanonicalRequestUser).toHaveBeenCalledWith('identity-user-1');
+    expect(mockGetUserById).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
   });
 
   it('continues when the refreshed user has verified email and MFA enabled', async () => {
