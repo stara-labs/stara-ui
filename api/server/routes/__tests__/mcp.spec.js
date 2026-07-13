@@ -22,6 +22,7 @@ const mockRegistryInstance = {
   addServer: jest.fn(),
   updateServer: jest.fn(),
   removeServer: jest.fn(),
+  isDynamicServerManagementEnabled: jest.fn().mockReturnValue(true),
   getAllowedDomains: jest.fn().mockReturnValue(null),
   getAllowedAddresses: jest.fn().mockReturnValue(null),
   resolveAllowlists: jest.fn().mockResolvedValue({
@@ -31,6 +32,7 @@ const mockRegistryInstance = {
   }),
 };
 let mockMCPUseAllowed = true;
+const mockMCPServerResourceAccess = jest.fn((req, res, next) => next());
 
 jest.mock('@librechat/api', () => {
   const actual = jest.requireActual('@librechat/api');
@@ -159,7 +161,7 @@ jest.mock('~/cache', () => ({
 jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, res, next) => next(),
   requireStaraAssurance: (req, res, next) => next(),
-  canAccessMCPServerResource: () => (req, res, next) => next(),
+  canAccessMCPServerResource: () => mockMCPServerResourceAccess,
 }));
 
 jest.mock('~/server/services/Tools/mcp', () => ({
@@ -202,6 +204,7 @@ describe('MCP Routes', () => {
     currentUser = undefined;
     mockResolveAllMcpConfigs.mockResolvedValue({});
     mockResolveMcpConfigNames.mockResolvedValue([]);
+    mockRegistryInstance.isDynamicServerManagementEnabled.mockReturnValue(true);
     const { MCPOAuthHandler } = require('@librechat/api');
     const { getTenantId } = require('@librechat/data-schemas');
     getTenantId.mockReturnValue(undefined);
@@ -2674,6 +2677,27 @@ describe('MCP Routes', () => {
   });
 
   describe('POST /servers', () => {
+    it('should reject dynamic server creation in canonical Stara mode', async () => {
+      mockRegistryInstance.isDynamicServerManagementEnabled.mockReturnValue(false);
+
+      const response = await request(app)
+        .post('/api/mcp/servers')
+        .send({
+          config: {
+            type: 'sse',
+            url: 'https://mcp-server.example.com/sse',
+            title: 'Disabled server',
+          },
+        });
+
+      expect(response.status).toBe(403);
+      expect(response.body).toEqual({
+        error: 'MCP_DYNAMIC_SERVERS_DISABLED',
+        message: 'Dynamic MCP server management is disabled in canonical Stara mode.',
+      });
+      expect(mockRegistryInstance.addServer).not.toHaveBeenCalled();
+    });
+
     it('should create MCP server with valid SSE config', async () => {
       const validConfig = {
         type: 'sse',
@@ -3099,6 +3123,27 @@ describe('MCP Routes', () => {
   });
 
   describe('GET /servers/:serverName', () => {
+    it('should read operator-managed config without a Mongo ACL lookup in canonical mode', async () => {
+      mockRegistryInstance.isDynamicServerManagementEnabled.mockReturnValue(false);
+      mockRegistryInstance.getServerConfig.mockResolvedValue({
+        type: 'streamable-http',
+        url: 'https://mcp.stara.co/mcp',
+        title: 'Stara MCP',
+        source: 'yaml',
+      });
+
+      const response = await request(app).get('/api/mcp/servers/stara');
+
+      expect(response.status).toBe(200);
+      expect(response.body.title).toBe('Stara MCP');
+      expect(mockMCPServerResourceAccess).not.toHaveBeenCalled();
+      expect(mockRegistryInstance.getServerConfig).toHaveBeenCalledWith(
+        'stara',
+        'test-user-id',
+        {},
+      );
+    });
+
     it('should return server config when found', async () => {
       const mockConfig = {
         type: 'sse',
@@ -3165,6 +3210,24 @@ describe('MCP Routes', () => {
   });
 
   describe('PATCH /servers/:serverName', () => {
+    it('should reject dynamic server updates in canonical Stara mode', async () => {
+      mockRegistryInstance.isDynamicServerManagementEnabled.mockReturnValue(false);
+
+      const response = await request(app)
+        .patch('/api/mcp/servers/test-server')
+        .send({
+          config: {
+            type: 'sse',
+            url: 'https://mcp-server.example.com/sse',
+          },
+        });
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('MCP_DYNAMIC_SERVERS_DISABLED');
+      expect(mockMCPServerResourceAccess).not.toHaveBeenCalled();
+      expect(mockRegistryInstance.updateServer).not.toHaveBeenCalled();
+    });
+
     it('should update server with valid config', async () => {
       const updatedConfig = {
         type: 'sse',
@@ -3303,6 +3366,17 @@ describe('MCP Routes', () => {
   });
 
   describe('DELETE /servers/:serverName', () => {
+    it('should reject dynamic server deletion in canonical Stara mode', async () => {
+      mockRegistryInstance.isDynamicServerManagementEnabled.mockReturnValue(false);
+
+      const response = await request(app).delete('/api/mcp/servers/test-server');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('MCP_DYNAMIC_SERVERS_DISABLED');
+      expect(mockMCPServerResourceAccess).not.toHaveBeenCalled();
+      expect(mockRegistryInstance.removeServer).not.toHaveBeenCalled();
+    });
+
     it('should delete server successfully', async () => {
       mockRegistryInstance.removeServer.mockResolvedValue(undefined);
 
