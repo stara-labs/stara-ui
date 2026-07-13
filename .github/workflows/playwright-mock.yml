@@ -108,7 +108,8 @@ jobs:
         run: npm run build:client
 
       - name: Install Playwright runtime dependencies
-        timeout-minutes: 5
+        # Ubuntu mirror latency can exceed five minutes while fetching font packages.
+        timeout-minutes: 15
         run: |
           google-chrome --version
           npx playwright install-deps chrome
