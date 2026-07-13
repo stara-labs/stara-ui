@@ -47,6 +47,7 @@ const {
   grantPermission,
 } = require('~/server/services/PermissionService');
 const { hasCapability } = require('~/server/middleware/roles/capabilities');
+const { canonicalPromptsEnabled } = require('~/models/canonicalPrompts');
 
 const router = express.Router();
 
@@ -136,6 +137,7 @@ router.get('/all', async (req, res) => {
     const result = await getListPromptGroupsByAccess({
       accessibleIds: filteredAccessibleIds,
       otherParams: filter,
+      canonicalFilter: { name, category },
     });
 
     if (!result) {
@@ -210,6 +212,7 @@ router.get('/groups', async (req, res) => {
     const result = await getListPromptGroupsByAccess({
       accessibleIds: filteredAccessibleIds,
       otherParams: filter,
+      canonicalFilter: { name, category },
       limit: actualLimit,
       after: actualCursor,
     });
@@ -360,7 +363,7 @@ router.post(
   async (req, res) => {
     try {
       const { groupId } = req.params;
-      if (!isValidObjectIdString(groupId)) {
+      if (!canonicalPromptsEnabled() && !isValidObjectIdString(groupId)) {
         return res.status(400).send({ error: 'Invalid groupId' });
       }
       const result = await incrementPromptGroupUsage(groupId);
@@ -456,7 +459,7 @@ router.get('/', async (req, res) => {
 
     // If requesting prompts for a specific group, check permissions
     if (groupId) {
-      if (!isValidObjectIdString(groupId)) {
+      if (!canonicalPromptsEnabled() && !isValidObjectIdString(groupId)) {
         return res.status(400).send({ error: 'Invalid groupId' });
       }
 
@@ -474,7 +477,9 @@ router.get('/', async (req, res) => {
       }
 
       // If user has access, fetch all prompts in the group (not just their own)
-      const prompts = await getPrompts({ groupId: new ObjectId(groupId) });
+      const prompts = await getPrompts({
+        groupId: canonicalPromptsEnabled() ? groupId : new ObjectId(groupId),
+      });
       return res.status(200).send(prompts);
     }
 
@@ -511,7 +516,7 @@ const deletePromptController = async (req, res) => {
   try {
     const { promptId } = req.params;
     const { groupId } = req.query;
-    if (!groupId || !isValidObjectIdString(groupId)) {
+    if (!groupId || (!canonicalPromptsEnabled() && !isValidObjectIdString(groupId))) {
       return res.status(400).send({ error: 'Invalid or missing groupId' });
     }
     const query = { promptId, groupId };

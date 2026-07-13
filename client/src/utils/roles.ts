@@ -29,15 +29,19 @@ export const ROLE_LOCALIZATIONS = {
   // PromptGroup roles
   promptGroup_viewer: {
     name: 'com_ui_role_viewer' as const,
-    description: 'com_ui_role_viewer_desc' as const,
+    description: 'com_ui_prompt_role_viewer_desc' as const,
+  } as const,
+  promptGroup_operator: {
+    name: 'com_ui_role_operator' as const,
+    description: 'com_ui_prompt_role_operator_desc' as const,
   } as const,
   promptGroup_editor: {
     name: 'com_ui_role_editor' as const,
-    description: 'com_ui_role_editor_desc' as const,
+    description: 'com_ui_prompt_role_editor_desc' as const,
   } as const,
   promptGroup_owner: {
     name: 'com_ui_role_owner' as const,
-    description: 'com_ui_role_owner_desc' as const,
+    description: 'com_ui_prompt_role_owner_desc' as const,
   } as const,
   // MCPServer roles
   mcpServer_viewer: {

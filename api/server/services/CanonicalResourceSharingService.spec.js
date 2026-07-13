@@ -10,6 +10,11 @@ jest.mock('~/models/canonicalSkills', () => ({
   canonicalSkillId: jest.fn((value) => String(value)),
 }));
 
+jest.mock('~/models/canonicalPrompts', () => ({
+  canonicalPromptsEnabled: jest.fn(() => true),
+  canonicalPromptId: jest.fn((value) => String(value)),
+}));
+
 jest.mock('~/server/services/StaraServiceClient', () => ({
   callStaraApi: (...args) => mockCallStaraApi(...args),
   safeString: (value, fallback, maxLength = 512) => {
@@ -130,5 +135,50 @@ describe('CanonicalResourceSharingService skills', () => {
     await expect(
       updateCanonicalResourcePermissions(user, ResourceType.SKILL, skillId, { public: true }),
     ).rejects.toThrow('Public skill sharing is not supported');
+  });
+});
+
+describe('CanonicalResourceSharingService prompts', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('maps the canonical prompt operator role into the permission picker', async () => {
+    mockCallStaraApi.mockImplementation((_user, path) => {
+      if (path !== '/v1/access/roles?resource_type=prompt') {
+        throw new Error(`Unexpected Stara request: GET ${path}`);
+      }
+      return Promise.resolve({
+        roles: [
+          { role_key: 'viewer', label: 'Can view', permissions: ['prompt.read'] },
+          {
+            role_key: 'operator',
+            label: 'Can use',
+            permissions: ['prompt.read', 'prompt.use'],
+          },
+          {
+            role_key: 'editor',
+            label: 'Can edit',
+            permissions: ['prompt.read', 'prompt.use', 'prompt.edit'],
+          },
+          {
+            role_key: 'owner',
+            label: 'Full access',
+            permissions: [
+              'prompt.read',
+              'prompt.use',
+              'prompt.edit',
+              'prompt.share',
+              'prompt.delete',
+            ],
+          },
+        ],
+      });
+    });
+
+    await expect(getCanonicalResourceRoles(user, ResourceType.PROMPTGROUP)).resolves.toEqual([
+      expect.objectContaining({ accessRoleId: AccessRoleIds.PROMPTGROUP_VIEWER }),
+      expect.objectContaining({ accessRoleId: AccessRoleIds.PROMPTGROUP_OPERATOR }),
+      expect.objectContaining({ accessRoleId: AccessRoleIds.PROMPTGROUP_EDITOR }),
+      expect.objectContaining({ accessRoleId: AccessRoleIds.PROMPTGROUP_OWNER }),
+    ]);
   });
 });

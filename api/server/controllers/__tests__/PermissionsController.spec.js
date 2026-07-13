@@ -56,6 +56,14 @@ jest.mock('~/server/services/CanonicalAgentSharingService', () => ({
   updateCanonicalAgentPermissions: jest.fn(),
 }));
 
+jest.mock('~/server/services/CanonicalResourceSharingService', () => ({
+  getCanonicalResourcePermissions: jest.fn(),
+  getCanonicalResourceRoles: jest.fn(),
+  isCanonicalResourceSharing: jest.fn(() => false),
+  searchCanonicalPrincipals: jest.fn(),
+  updateCanonicalResourcePermissions: jest.fn(),
+}));
+
 const db = require('~/models');
 const {
   updateResourcePermissions,
