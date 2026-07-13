@@ -20,6 +20,7 @@ const {
   searchEntraIdPrincipals,
 } = require('~/server/services/GraphApiService');
 const db = require('~/models');
+const { getCanonicalRequestUser } = require('~/server/services/StaraApiClient');
 const {
   getCanonicalResourcePermissions,
   getCanonicalResourceRoles,
@@ -35,23 +36,7 @@ const matchesCurrentTenant = (principal, tenantId) => {
   return principal?.tenantId === tenantId;
 };
 
-const loadCanonicalSharingUser = async (requestUser) => {
-  const user = await db.getUserById(
-    requestUser?.id,
-    '_id id email username name tenantId idOnTheSource identitySubject emailVerified twoFactorEnabled',
-  );
-  if (!user) {
-    const error = new Error('User principal not found');
-    error.status = 404;
-    throw error;
-  }
-  const profile = user.toObject?.() ?? user;
-  return {
-    ...requestUser,
-    ...profile,
-    id: profile.id ?? profile._id?.toString() ?? requestUser.id,
-  };
-};
+const loadCanonicalSharingUser = (requestUser) => getCanonicalRequestUser(requestUser?.id);
 
 /**
  * Generic controller for resource permission endpoints

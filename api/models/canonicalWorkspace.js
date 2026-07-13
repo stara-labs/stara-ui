@@ -1,5 +1,6 @@
 const { logger } = require('@librechat/data-schemas');
 const { callStaraApi, getUserId, safeString } = require('~/server/services/StaraServiceClient');
+const { getCanonicalRequestUser } = require('~/server/services/StaraApiClient');
 const { canonicalAgentId, libreChatAgentId } = require('./canonicalAgents');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -13,26 +14,12 @@ const workspaceEnabled = () =>
       .toLowerCase(),
   );
 
-const createCanonicalWorkspaceMethods = (baseMethods) => {
+const createCanonicalWorkspaceMethods = (_baseMethods) => {
   if (!workspaceEnabled()) {
     return {};
   }
 
-  const loadUser = async (userId) => {
-    if (!userId) {
-      throw new Error('User not authenticated');
-    }
-    const user = await baseMethods.getUserById(
-      userId,
-      '_id id email username name tenantId idOnTheSource emailVerified twoFactorEnabled',
-    );
-    if (!user) {
-      const error = new Error('Authenticated user was not found');
-      error.status = 401;
-      throw error;
-    }
-    return { ...user, _id: user._id, id: user.id ?? user._id?.toString() ?? userId };
-  };
+  const loadUser = async (userId) => getCanonicalRequestUser(userId);
 
   const request = (user, path, options = {}) =>
     callStaraApi(user, path, { ...options, tenantId: user.tenantId });

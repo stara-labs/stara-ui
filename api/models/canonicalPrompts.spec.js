@@ -13,6 +13,11 @@ jest.mock('~/server/services/StaraServiceClient', () => ({
   },
 }));
 
+const mockGetCanonicalRequestUser = jest.fn();
+jest.mock('~/server/services/StaraApiClient', () => ({
+  getCanonicalRequestUser: (...args) => mockGetCanonicalRequestUser(...args),
+}));
+
 const originalPrompts = process.env.STARA_CANONICAL_PROMPTS;
 const originalWorkspace = process.env.STARA_CANONICAL_WORKSPACE;
 const {
@@ -72,7 +77,10 @@ describe('canonical prompt model adapter', () => {
     restoreEnv('STARA_CANONICAL_WORKSPACE', originalWorkspace);
   });
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetCanonicalRequestUser.mockReturnValue(user);
+  });
 
   it('can be explicitly disabled without disabling the rest of the workspace', () => {
     process.env.STARA_CANONICAL_PROMPTS = 'false';
@@ -98,7 +106,8 @@ describe('canonical prompt model adapter', () => {
         isPublic: false,
       }),
     ]);
-    expect(base.getUserById).toHaveBeenCalledTimes(1);
+    expect(mockGetCanonicalRequestUser).toHaveBeenCalledWith('mongo-user');
+    expect(base.getUserById).not.toHaveBeenCalled();
   });
 
   it('resolves prompt access with trusted tenant context', async () => {
@@ -114,7 +123,7 @@ describe('canonical prompt model adapter', () => {
 });
 
 function baseMethods() {
-  return { getUserById: jest.fn().mockResolvedValue(user) };
+  return { getUserById: jest.fn() };
 }
 
 function restoreEnv(name, value) {

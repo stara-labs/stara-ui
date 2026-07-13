@@ -11,12 +11,6 @@ jest.mock('@librechat/data-schemas', () => ({
   },
 }));
 
-jest.mock('~/models', () => ({
-  getUserById: jest.fn(),
-  updateUser: jest.fn(),
-}));
-
-const db = require('~/models');
 const {
   acceptInviteController,
   activateOrganizationController,
@@ -36,8 +30,6 @@ describe('StaraOrganizationsController canonical API proxy', () => {
     process.env.APP_PUBLIC_URL = 'https://control-plane.stara.co';
     process.env.RESEND_API_KEY = '';
     process.env.RESEND_FROM_EMAIL = '';
-    db.getUserById.mockResolvedValue(makeUser());
-    db.updateUser.mockResolvedValue(makeUser({ tenantId: 'tenant_acme-health' }));
   });
 
   afterAll(() => {
@@ -46,7 +38,7 @@ describe('StaraOrganizationsController canonical API proxy', () => {
     restoreEnv('RESEND_FROM_EMAIL', originalResendFromEmail);
   });
 
-  it('loads organization context entirely from stara-api and only mirrors active tenantId', async () => {
+  it('loads organization context entirely from stara-api without a Mongo profile mirror', async () => {
     mockContext();
     const res = makeRes();
 
@@ -65,9 +57,6 @@ describe('StaraOrganizationsController canonical API proxy', () => {
       }),
     );
     expect(fetch.mock.calls[0][1].headers).not.toHaveProperty('x-stara-user-id');
-    expect(db.updateUser).toHaveBeenCalledWith('user_owner', {
-      tenantId: 'tenant_acme-health',
-    });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json.mock.calls[0][0]).toMatchObject({
       activeOrg: { tenantId: 'tenant_acme-health', roleLabel: 'Owner' },
@@ -101,14 +90,10 @@ describe('StaraOrganizationsController canonical API proxy', () => {
         headers: expect.objectContaining({ 'x-stara-tenant-id': 'tenant_acme-health' }),
       }),
     );
-    expect(db.updateUser).toHaveBeenCalledWith('user_owner', {
-      tenantId: 'tenant_acme-health',
-    });
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
   it('creates canonical invites and keeps only the fallback delivery response in the UI layer', async () => {
-    db.getUserById.mockResolvedValue(makeUser({ tenantId: 'tenant_acme-health' }));
     mockFetchJson({
       invite: apiInvite(),
       token: 'invite_token_000000000000000000000001',
@@ -146,10 +131,7 @@ describe('StaraOrganizationsController canonical API proxy', () => {
     expect(res.json.mock.calls[0][0].inviteLink).toContain('invite_token_000000000000000000000001');
   });
 
-  it('accepts invitations through stara-api and mirrors only the selected tenant', async () => {
-    db.getUserById.mockResolvedValue(
-      makeUser({ _id: 'user_member', id: 'user_member', email: 'lee@example.com', name: 'Lee' }),
-    );
+  it('accepts invitations through stara-api without writing compatibility state', async () => {
     mockFetchJson({
       org: apiOrg('active'),
       active_tenant_id: 'tenant_acme-health',
@@ -171,16 +153,10 @@ describe('StaraOrganizationsController canonical API proxy', () => {
       res,
     );
 
-    expect(db.updateUser).toHaveBeenCalledWith('user_member', {
-      tenantId: 'tenant_acme-health',
-    });
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
   it('lets a regular member select an active organization through the canonical API', async () => {
-    db.getUserById.mockResolvedValue(
-      makeUser({ tenantId: 'tenant_previous', email: 'lee@example.com', name: 'Lee' }),
-    );
     mockFetchJson({ org: apiOrg('active'), active_tenant_id: 'tenant_acme-health' });
     mockContext('member');
     const res = makeRes();
@@ -198,14 +174,10 @@ describe('StaraOrganizationsController canonical API proxy', () => {
       'http://stara-api:3081/v1/orgs/tenant_acme-health/activate',
       expect.objectContaining({ method: 'POST' }),
     );
-    expect(db.updateUser).toHaveBeenCalledWith('user_owner', {
-      tenantId: 'tenant_acme-health',
-    });
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
   it('does not treat a legacy Mongo tenant as the canonical active organization', async () => {
-    db.getUserById.mockResolvedValue(makeUser({ tenantId: 'tenant_legacy' }));
     mockFetchJson(accessOptions());
     mockFetchJson({
       active_tenant_id: null,
@@ -215,7 +187,6 @@ describe('StaraOrganizationsController canonical API proxy', () => {
 
     await getOrganizationsContextController(makeReq(), res);
 
-    expect(db.updateUser).toHaveBeenCalledWith('user_owner', { tenantId: null });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(res.json.mock.calls[0][0]).toMatchObject({
       activeOrg: null,

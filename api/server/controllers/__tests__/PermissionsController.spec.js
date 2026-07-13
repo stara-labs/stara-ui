@@ -48,6 +48,11 @@ jest.mock('~/server/services/GraphApiService', () => ({
   searchEntraIdPrincipals: jest.fn(),
 }));
 
+const mockGetCanonicalRequestUser = jest.fn();
+jest.mock('~/server/services/StaraApiClient', () => ({
+  getCanonicalRequestUser: (...args) => mockGetCanonicalRequestUser(...args),
+}));
+
 jest.mock('~/server/services/CanonicalAgentSharingService', () => ({
   getCanonicalAgentPermissions: jest.fn(),
   getCanonicalAgentRoles: jest.fn(),
@@ -66,9 +71,14 @@ jest.mock('~/server/services/CanonicalResourceSharingService', () => ({
 
 const db = require('~/models');
 const {
+  getCanonicalResourceRoles,
+  isCanonicalResourceSharing,
+} = require('~/server/services/CanonicalResourceSharingService');
+const {
   updateResourcePermissions,
   searchPrincipals,
   getResourcePermissions,
+  getResourceRoles,
 } = require('../PermissionsController');
 
 const createMockReq = (overrides = {}) => ({
@@ -92,6 +102,27 @@ describe('PermissionsController', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetTenantId.mockReturnValue(undefined);
+    isCanonicalResourceSharing.mockReturnValue(false);
+  });
+
+  it('loads canonical roles from the request actor without re-reading its Mongo profile', async () => {
+    const canonicalUser = {
+      id: 'user-1',
+      email: 'owner@example.com',
+      tenantId: 'tenant_acme',
+    };
+    mockGetCanonicalRequestUser.mockReturnValue(canonicalUser);
+    isCanonicalResourceSharing.mockReturnValue(true);
+    getCanonicalResourceRoles.mockResolvedValue([{ accessRoleId: 'owner', name: 'Owner' }]);
+    const req = createMockReq({ params: { resourceType: ResourceType.AGENT } });
+    const res = createMockRes();
+
+    await getResourceRoles(req, res);
+
+    expect(mockGetCanonicalRequestUser).toHaveBeenCalledWith('user-1');
+    expect(getCanonicalResourceRoles).toHaveBeenCalledWith(canonicalUser, ResourceType.AGENT);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith([{ accessRoleId: 'owner', name: 'Owner' }]);
   });
 
   describe('searchPrincipals', () => {

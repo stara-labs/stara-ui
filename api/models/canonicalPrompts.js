@@ -7,6 +7,7 @@ const {
 } = require('@librechat/api');
 const { PermissionBits } = require('librechat-data-provider');
 const { callStaraApi, getUserId, safeString } = require('~/server/services/StaraServiceClient');
+const { getCanonicalRequestUser } = require('~/server/services/StaraApiClient');
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 
@@ -20,13 +21,13 @@ const canonicalPromptsEnabled = () => {
   );
 };
 
-const createCanonicalPromptMethods = (baseMethods) => {
+const createCanonicalPromptMethods = (_baseMethods) => {
   if (!canonicalPromptsEnabled()) {
     return {};
   }
   return createStaraPromptMethods({
     withActor: async (callback) => {
-      const user = await loadCurrentUser(baseMethods);
+      const user = await loadCurrentUser();
       const me = await request(user, '/v1/me');
       return callback(user, me.user);
     },
@@ -72,19 +73,12 @@ const hasCanonicalPromptPermission = async (user, promptId, requiredPermission, 
   }
 };
 
-const loadCurrentUser = async (baseMethods) => {
+const loadCurrentUser = async () => {
   const userId = getContextUserId();
   if (!userId) {
     throw httpError('Authenticated user context is required', 401);
   }
-  const user = await baseMethods.getUserById(
-    userId,
-    '_id id email username name tenantId idOnTheSource identitySubject emailVerified twoFactorEnabled',
-  );
-  if (!user) {
-    throw httpError('Authenticated user was not found', 401);
-  }
-  return { ...user, id: user.id ?? user._id?.toString() ?? userId };
+  return getCanonicalRequestUser(userId);
 };
 
 const request = (user, path, options = {}) =>

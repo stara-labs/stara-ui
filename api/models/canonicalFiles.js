@@ -3,6 +3,7 @@ const {
   canonicalFilesEnabled,
   listCanonicalFiles,
 } = require('~/server/services/CanonicalFileService');
+const { getCanonicalRequestUser } = require('~/server/services/StaraApiClient');
 
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
 
@@ -18,16 +19,7 @@ const createCanonicalFileMethods = (baseMethods) => {
       error.status = 401;
       throw error;
     }
-    const user = await baseMethods.getUserById(
-      userId,
-      '_id id email username name tenantId idOnTheSource emailVerified twoFactorEnabled',
-    );
-    if (!user) {
-      const error = new Error('Authenticated user was not found');
-      error.status = 401;
-      throw error;
-    }
-    return { ...user, id: user.id ?? user._id?.toString() ?? userId };
+    return getCanonicalRequestUser(userId);
   };
 
   const getFiles = async (filter = {}, sortOptions, selectFields) => {
