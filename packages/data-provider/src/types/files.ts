@@ -1,5 +1,5 @@
-import { EToolResources } from './assistants';
 import type { CodeEnvRef } from '../codeEnvRef';
+import { EToolResources } from './assistants';
 
 export enum FileSources {
   local = 'local',
@@ -16,6 +16,7 @@ export enum FileSources {
   vertexai_mistral_ocr = 'vertexai_mistral_ocr',
   text = 'text',
   document_parser = 'document_parser',
+  stara = 'stara',
 }
 
 export const checkOpenAIStorage = (source: string) =>

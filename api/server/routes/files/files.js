@@ -34,6 +34,13 @@ const { cleanFileName, getContentDisposition } = require('~/server/utils/files')
 const { getLogStores } = require('~/cache');
 const { Readable } = require('stream');
 const db = require('~/models');
+const {
+  canonicalFilesEnabled,
+  createCanonicalDownload,
+  deleteCanonicalFiles,
+  listCanonicalFiles,
+  uploadCanonicalFile,
+} = require('~/server/services/CanonicalFileService');
 
 const router = express.Router();
 const AGENT_TOOL_RESOURCE_KEYS = new Set([
@@ -47,8 +54,14 @@ const AGENT_TOOL_RESOURCE_KEYS = new Set([
 const isAgentToolResourceKey = (toolResource) =>
   typeof toolResource === 'string' && AGENT_TOOL_RESOURCE_KEYS.has(toolResource);
 
+const canonicalOrLegacyFileAccess = (req, res, next) =>
+  canonicalFilesEnabled() ? next() : fileAccess(req, res, next);
+
 router.get('/', async (req, res) => {
   try {
+    if (canonicalFilesEnabled()) {
+      return res.status(200).json(await listCanonicalFiles(req.user));
+    }
     const appConfig = req.config;
     const files = await db.getFiles({ user: req.user.id });
     if (appConfig.fileStrategy === FileSources.s3) {
@@ -117,6 +130,11 @@ router.get('/agent/:agent_id', async (req, res) => {
       return res.status(200).json([]);
     }
 
+    if (canonicalFilesEnabled()) {
+      const files = await listCanonicalFiles(req.user);
+      return res.status(200).json(files.filter((file) => agentFileIds.has(file.file_id)));
+    }
+
     const files = await db.getFiles({ file_id: { $in: [...agentFileIds] } }, null, {
       text: 0,
     });
@@ -141,6 +159,58 @@ router.get('/config', async (req, res) => {
 router.delete('/', async (req, res) => {
   try {
     const { files: _files } = req.body;
+
+    const allFilesAreCanonical =
+      Array.isArray(_files) &&
+      _files.length > 0 &&
+      _files.every((file) => file?.source === 'stara');
+    if (canonicalFilesEnabled() && allFilesAreCanonical && !req.body.assistant_id) {
+      const canonicalFiles = (_files ?? []).filter(
+        (file) => isUUID.safeParse(file?.file_id).success,
+      );
+      if (canonicalFiles.length === 0) {
+        return res.status(204).json({ message: 'Nothing provided to delete' });
+      }
+      if (req.body.agent_id && req.body.tool_resource) {
+        if (!isAgentToolResourceKey(req.body.tool_resource)) {
+          return res.status(400).json({ message: 'Invalid agent tool resource' });
+        }
+        const agent = await db.getAgent({ id: req.body.agent_id });
+        if (!agent) {
+          return res.status(404).json({ message: 'Agent not found' });
+        }
+        const hasAgentEditAccess =
+          agent.author?.toString() === req.user.id.toString() ||
+          (await checkPermission({
+            userId: req.user.id,
+            role: req.user.role,
+            resourceType: ResourceType.AGENT,
+            resourceId: agent._id,
+            requiredPermission: PermissionBits.EDIT,
+          }));
+        if (!hasAgentEditAccess) {
+          return res.status(403).json({
+            message: 'You can only delete files you have access to',
+            unauthorizedFiles: canonicalFiles.map((file) => file.file_id),
+          });
+        }
+        await db.removeAgentResourceFiles({
+          agent_id: req.body.agent_id,
+          files: canonicalFiles.map((file) => ({
+            tool_resource: req.body.tool_resource,
+            file_id: file.file_id,
+          })),
+        });
+        return res
+          .status(200)
+          .json({ message: 'File associations removed successfully from agent' });
+      }
+      await deleteCanonicalFiles(
+        req.user,
+        canonicalFiles.map((file) => file.file_id),
+      );
+      return res.status(200).json({ message: 'Files deleted successfully' });
+    }
 
     /** @type {MongoFile[]} */
     const files = _files.filter((file) => {
@@ -368,9 +438,18 @@ const PREVIEW_LAZY_SWEEP_CUTOFF_MS = 2 * 60 * 1000;
  *
  * @route GET /files/:file_id/preview
  */
-router.get('/:file_id/preview', fileAccess, async (req, res) => {
+router.get('/:file_id/preview', canonicalOrLegacyFileAccess, async (req, res) => {
   try {
     const { file_id } = req.params;
+    if (canonicalFilesEnabled()) {
+      const file = (await listCanonicalFiles(req.user)).find(
+        (candidate) => candidate.file_id === file_id,
+      );
+      if (!file) {
+        return res.status(404).json({ error: 'file_not_found' });
+      }
+      return res.status(200).json({ file_id, status: file.status ?? 'ready' });
+    }
     /* `fileAccess` already fetched the record (sans `text`, the default
      * projection drops it). Reuse for the lifecycle check; only re-fetch
      * with `text` on a terminal ready response — the typical lifecycle
@@ -479,10 +558,21 @@ const getDownloadFileMetadata = (file) => {
   }, {});
 };
 
-router.get('/download-url/:userId/:file_id', fileAccess, async (req, res) => {
+router.get('/download-url/:userId/:file_id', canonicalOrLegacyFileAccess, async (req, res) => {
   try {
     const { userId, file_id } = req.params;
     logger.debug(`File download URL requested by user ${userId}: ${file_id}`);
+
+    if (canonicalFilesEnabled()) {
+      const result = await createCanonicalDownload(req.user, file_id);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({
+        url: result.download.url,
+        filename: result.file.filename,
+        type: result.file.type,
+        metadata: getDownloadFileMetadata(result.file),
+      });
+    }
 
     const file = req.fileAccess.file;
     if (checkOpenAIStorage(file.source) && !file.model) {
@@ -517,10 +607,16 @@ router.get('/download-url/:userId/:file_id', fileAccess, async (req, res) => {
   }
 });
 
-router.get('/download/:userId/:file_id', fileAccess, async (req, res) => {
+router.get('/download/:userId/:file_id', canonicalOrLegacyFileAccess, async (req, res) => {
   try {
     const { userId, file_id } = req.params;
     logger.debug(`File download requested by user ${userId}: ${file_id}`);
+
+    if (canonicalFilesEnabled()) {
+      const result = await createCanonicalDownload(req.user, file_id);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.redirect(302, result.download.url);
+    }
 
     // Access already validated by fileAccess middleware
     const file = req.fileAccess.file;
@@ -642,6 +738,33 @@ router.post('/', async (req, res) => {
       }
     }
 
+    if (canonicalFilesEnabled()) {
+      if (
+        metadata.tool_resource === EToolResources.file_search ||
+        metadata.tool_resource === EToolResources.execute_code
+      ) {
+        const error = new Error('This file tool is not available in the canonical Stara runtime');
+        error.status = 400;
+        throw error;
+      }
+      const result = await uploadCanonicalFile({
+        user: req.user,
+        file: req.file,
+        fileId: metadata.file_id,
+        tempFileId: metadata.temp_file_id,
+        metadata,
+      });
+      if (!metadata.message_file && metadata.agent_id && metadata.tool_resource) {
+        await db.addAgentResourceFile({
+          file_id: result.file_id,
+          agent_id: metadata.agent_id,
+          tool_resource: metadata.tool_resource,
+          updatingUserId: req.user.id,
+        });
+      }
+      return res.status(200).json({ message: 'File uploaded successfully', ...result });
+    }
+
     return await processAgentFileUpload({ req, res, metadata });
   } catch (error) {
     const message = resolveUploadErrorMessage(error);
@@ -653,7 +776,7 @@ router.post('/', async (req, res) => {
     } catch (error) {
       logger.error('[/files] Error deleting file:', error);
     }
-    res.status(500).json({ message });
+    res.status(error.status ?? 500).json({ message });
   } finally {
     if (cleanup) {
       try {
