@@ -1,0 +1,84 @@
+jest.mock('@librechat/data-schemas', () => ({ getUserId: jest.fn() }));
+jest.mock('~/server/services/CanonicalFileService', () => ({
+  canonicalFilesEnabled: jest.fn(),
+  listCanonicalFiles: jest.fn(),
+}));
+
+const { getUserId } = require('@librechat/data-schemas');
+const {
+  canonicalFilesEnabled,
+  listCanonicalFiles,
+} = require('~/server/services/CanonicalFileService');
+const { createCanonicalFileMethods, matchesFilter } = require('./canonicalFiles');
+
+const canonical = {
+  file_id: '00000000-0000-4000-8000-000000000101',
+  user: 'user-1',
+  filename: 'canonical.txt',
+  source: 'stara',
+  updatedAt: '2026-07-13T00:00:00.000Z',
+};
+
+describe('canonical file model adapter', () => {
+  const legacy = {
+    file_id: 'legacy-file',
+    user: 'user-1',
+    filename: 'legacy.txt',
+    source: 'local',
+    updatedAt: '2026-07-12T00:00:00.000Z',
+  };
+  const baseMethods = {
+    getUserById: jest.fn().mockResolvedValue({
+      _id: 'user-1',
+      id: 'user-1',
+      tenantId: 'tenant_acme',
+      email: 'maya@example.com',
+    }),
+    getFiles: jest.fn().mockResolvedValue([legacy]),
+    findFileById: jest.fn(),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    delete process.env.STARA_LEGACY_FILE_READ_FALLBACK;
+    getUserId.mockReturnValue('user-1');
+    canonicalFilesEnabled.mockReturnValue(true);
+    listCanonicalFiles.mockResolvedValue([canonical]);
+    baseMethods.getUserById.mockResolvedValue({
+      _id: 'user-1',
+      id: 'user-1',
+      tenantId: 'tenant_acme',
+      email: 'maya@example.com',
+    });
+    baseMethods.getFiles.mockResolvedValue([legacy]);
+  });
+
+  it('does not replace legacy methods when canonical files are disabled', () => {
+    canonicalFilesEnabled.mockReturnValue(false);
+    expect(createCanonicalFileMethods(baseMethods)).toEqual({});
+  });
+
+  it('returns canonical files first and keeps legacy records only for migration reads', async () => {
+    const methods = createCanonicalFileMethods(baseMethods);
+
+    await expect(methods.getFiles({ user: 'user-1' })).resolves.toEqual([canonical, legacy]);
+    expect(listCanonicalFiles).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
+    await expect(methods.findFileById(canonical.file_id)).resolves.toEqual(canonical);
+  });
+
+  it('can disable the Mongo fallback after offline migration', async () => {
+    process.env.STARA_LEGACY_FILE_READ_FALLBACK = 'false';
+    const methods = createCanonicalFileMethods(baseMethods);
+
+    await expect(methods.getFiles({ file_id: canonical.file_id })).resolves.toEqual([canonical]);
+    expect(baseMethods.getFiles).not.toHaveBeenCalled();
+  });
+
+  it('supports the Mongo-style filters used by attachment readers', () => {
+    expect(
+      matchesFilter(canonical, { file_id: { $in: [canonical.file_id] }, source: { $ne: 'local' } }),
+    ).toBe(true);
+    expect(matchesFilter(canonical, { $or: [{ embedded: true }, { source: 'stara' }] })).toBe(true);
+    expect(matchesFilter(canonical, { 'metadata.codeEnvRef': { $exists: true } })).toBe(false);
+  });
+});
