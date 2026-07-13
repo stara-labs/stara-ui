@@ -8,6 +8,7 @@ jest.mock('~/components/Auth', () => ({
   ResetPassword: () => null,
   ApiErrorWatcher: () => null,
   TwoFactorScreen: () => null,
+  IdentityPlatformMfaSetup: () => null,
   RequestPasswordReset: () => null,
 }));
 

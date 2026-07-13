@@ -201,9 +201,13 @@ const getStaraOnboardingContextController = async (req, res) => {
 const syncStaraIdentityController = async (req, res) => {
   try {
     const user = requireStaraUser(req.user);
+    const inviteToken = safeString(req.body?.invite_token, undefined, 512);
     const account = await callStaraApi(user, '/v1/identity/sync', {
       method: 'POST',
-      body: { display_name: safeString(user.name ?? user.username ?? user.email, 'Stara user') },
+      body: {
+        display_name: safeString(user.name ?? user.username ?? user.email, 'Stara user'),
+        ...(inviteToken ? { invite_token: inviteToken } : {}),
+      },
     });
     return res.status(200).json(account);
   } catch (error) {

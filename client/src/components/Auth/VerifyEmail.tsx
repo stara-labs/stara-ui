@@ -1,10 +1,105 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Spinner, ThemeSelector } from '@librechat/client';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useVerifyEmailMutation, useResendVerificationEmail } from '~/data-provider';
+import type { TIdentityPlatformStartupConfig } from 'librechat-data-provider';
+import type { ReactNode } from 'react';
+import {
+  applyIdentityPlatformEmailVerification,
+  identityPlatformErrorMessage,
+  rememberIdentityPlatformSignupInvite,
+} from '~/lib/auth/identityPlatform';
+import {
+  useGetStartupConfig,
+  useResendVerificationEmail,
+  useVerifyEmailMutation,
+} from '~/data-provider';
 import { useLocalize } from '~/hooks';
 
-function RequestPasswordReset() {
+const inviteTokenFrom = (params: URLSearchParams): string | undefined => {
+  const direct = params.get('invite_token');
+  if (direct) {
+    return direct;
+  }
+  const continueUrl = params.get('continueUrl');
+  if (!continueUrl) {
+    return undefined;
+  }
+  try {
+    return new URL(continueUrl).searchParams.get('invite_token') ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const VerificationShell = ({ children }: { children: ReactNode }) => (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-surface-primary px-6">
+    <div className="absolute bottom-0 left-0 m-4">
+      <ThemeSelector />
+    </div>
+    {children}
+  </div>
+);
+
+function IdentityPlatformVerifyEmail({
+  config,
+  params,
+}: {
+  config: TIdentityPlatformStartupConfig;
+  params: URLSearchParams;
+}) {
+  const navigate = useNavigate();
+  const attemptedRef = useRef(false);
+  const [status, setStatus] = useState<'working' | 'success' | 'error'>('working');
+  const [message, setMessage] = useState('Verifying your email...');
+
+  useEffect(() => {
+    if (attemptedRef.current) {
+      return;
+    }
+    attemptedRef.current = true;
+    const actionCode = params.get('oobCode');
+    const inviteToken = inviteTokenFrom(params);
+    if (!actionCode) {
+      setStatus('error');
+      setMessage('This verification link is invalid or incomplete.');
+      return;
+    }
+
+    void applyIdentityPlatformEmailVerification(config, actionCode)
+      .then(() => {
+        if (inviteToken) {
+          rememberIdentityPlatformSignupInvite(params.get('email') ?? undefined, inviteToken);
+        }
+        setStatus('success');
+        setMessage('Email verified. Sign in to set up multi-factor authentication.');
+      })
+      .catch((error: unknown) => {
+        setStatus('error');
+        setMessage(identityPlatformErrorMessage(error));
+      });
+  }, [config, params]);
+
+  return (
+    <VerificationShell>
+      {status === 'working' ? (
+        <Spinner className="size-8 text-green-500" />
+      ) : (
+        <div className="flex max-w-md flex-col items-center gap-5 text-center">
+          <h1 className="text-2xl font-semibold text-text-primary">{message}</h1>
+          <button
+            type="button"
+            onClick={() => navigate('/login', { replace: true })}
+            className="font-medium text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+          >
+            {status === 'success' ? 'Continue to sign in' : 'Back to sign in'}
+          </button>
+        </div>
+      )}
+    </VerificationShell>
+  );
+}
+
+function LegacyVerifyEmail() {
   const navigate = useNavigate();
   const localize = useLocalize();
   const [params] = useSearchParams();
@@ -36,7 +131,7 @@ function RequestPasswordReset() {
       setVerificationStatus(true);
       countdownRedirect();
     },
-    onError: (error: unknown) => {
+    onError: (_error: unknown) => {
       setHeaderText(localize('com_auth_email_verification_failed') + ' 😢');
       setShowResendLink(true);
       setVerificationStatus(true);
@@ -74,7 +169,7 @@ function RequestPasswordReset() {
       setShowResendLink(true);
       setVerificationStatus(true);
     }
-  }, [token, email, verificationStatus, verifyEmailMutation]);
+  }, [token, email, verificationStatus, verifyEmailMutation, localize]);
 
   const VerificationSuccess = () => (
     <div className="flex flex-col items-center justify-center">
@@ -122,4 +217,22 @@ function RequestPasswordReset() {
   );
 }
 
-export default RequestPasswordReset;
+function VerifyEmail() {
+  const [params] = useSearchParams();
+  const startupConfig = useGetStartupConfig();
+  if (!startupConfig.isFetched) {
+    return (
+      <VerificationShell>
+        <Spinner className="size-8 text-green-500" />
+      </VerificationShell>
+    );
+  }
+  if (startupConfig.data?.identityPlatform) {
+    return (
+      <IdentityPlatformVerifyEmail config={startupConfig.data.identityPlatform} params={params} />
+    );
+  }
+  return <LegacyVerifyEmail />;
+}
+
+export default VerifyEmail;

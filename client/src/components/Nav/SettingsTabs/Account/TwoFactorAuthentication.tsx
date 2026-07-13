@@ -3,6 +3,7 @@ import { useSetRecoilState } from 'recoil';
 import { SmartphoneIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  Button,
   OGDialog,
   useToastContext,
   OGDialogContent,
@@ -10,14 +11,20 @@ import {
   OGDialogTitle,
   Progress,
 } from '@librechat/client';
+import type { TIdentityPlatformStartupConfig } from 'librechat-data-provider';
 import type { TUser, TVerify2FARequest } from 'librechat-data-provider';
 import type { Variants } from 'framer-motion';
 import {
   useConfirmTwoFactorMutation,
   useDisableTwoFactorMutation,
   useEnableTwoFactorMutation,
+  useGetStartupConfig,
   useVerifyTwoFactorMutation,
 } from '~/data-provider';
+import {
+  identityPlatformErrorMessage,
+  removeIdentityPlatformTotp,
+} from '~/lib/auth/identityPlatform';
 import { SetupPhase, QRPhase, VerifyPhase, BackupPhase, DisablePhase } from './TwoFactorPhases';
 import { DisableTwoFactorToggle } from './DisableTwoFactorToggle';
 import { useAuthContext, useLocalize } from '~/hooks';
@@ -36,6 +43,7 @@ const TwoFactorAuthentication: React.FC = () => {
   const { user } = useAuthContext();
   const setUser = useSetRecoilState(store.user);
   const { showToast } = useToastContext();
+  const startupConfig = useGetStartupConfig();
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const [secret, setSecret] = useState<string>('');
@@ -190,6 +198,15 @@ const TwoFactorAuthentication: React.FC = () => {
     [disable2FAMutate, showToast, localize, setUser],
   );
 
+  if (startupConfig.data?.identityPlatform) {
+    return (
+      <IdentityPlatformTwoFactorControl
+        config={startupConfig.data.identityPlatform}
+        showToast={showToast}
+      />
+    );
+  }
+
   return (
     <OGDialog
       open={isDialogOpen}
@@ -299,6 +316,66 @@ const TwoFactorAuthentication: React.FC = () => {
             </AnimatePresence>
           </motion.div>
         </AnimatePresence>
+      </OGDialogContent>
+    </OGDialog>
+  );
+};
+
+const IdentityPlatformTwoFactorControl = ({
+  config,
+  showToast,
+}: {
+  config: TIdentityPlatformStartupConfig;
+  showToast: ReturnType<typeof useToastContext>['showToast'];
+}) => {
+  const localize = useLocalize();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [isDialogOpen, setDialogOpen] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  const remove = async () => {
+    setIsRemoving(true);
+    try {
+      await removeIdentityPlatformTotp(config);
+      setDialogOpen(false);
+      showToast({ message: localize('com_ui_2fa_disabled') });
+    } catch (error) {
+      showToast({ message: identityPlatformErrorMessage(error), status: 'error' });
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  return (
+    <OGDialog open={isDialogOpen} onOpenChange={setDialogOpen} triggerRef={buttonRef}>
+      <DisableTwoFactorToggle
+        enabled={true}
+        onChange={() => setDialogOpen(true)}
+        disabled={isRemoving}
+        buttonRef={buttonRef}
+      />
+      <OGDialogContent className="w-11/12 max-w-md p-6">
+        <OGDialogHeader>
+          <OGDialogTitle>{localize('com_ui_2fa_disable')}</OGDialogTitle>
+        </OGDialogHeader>
+        <div className="mt-6 flex justify-end gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setDialogOpen(false)}
+            disabled={isRemoving}
+          >
+            {localize('com_ui_cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void remove()}
+            disabled={isRemoving}
+          >
+            {localize('com_ui_2fa_disable')}
+          </Button>
+        </div>
       </OGDialogContent>
     </OGDialog>
   );

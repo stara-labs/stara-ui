@@ -37,15 +37,31 @@ jest.mock('librechat-data-provider', () => ({
 }));
 
 const mockRefreshIdentityPlatformToken = jest.fn();
+const mockResendIdentityPlatformEmailVerification = jest.fn();
 const mockSignInToIdentityPlatform = jest.fn();
 const mockSignOutFromIdentityPlatform = jest.fn();
 const mockSubscribeToIdentityPlatform = jest.fn();
+const mockGetIdentityPlatformAssurance = jest.fn();
+const mockGetIdentityPlatformSignupInvite = jest.fn();
+const mockClearIdentityPlatformSignupInvite = jest.fn();
+const mockIsIdentityPlatformRegistrationInProgress = jest.fn();
+const mockIsSuppressedIdentityPlatformRegistrationUser = jest.fn();
 let mockIdentityUserListener: ((user: unknown) => void) | undefined;
 let _mockIdentityErrorListener: ((error: Error) => void) | undefined;
 
 jest.mock('~/lib/auth/identityPlatform', () => ({
+  clearIdentityPlatformSignupInvite: (...args: unknown[]) =>
+    mockClearIdentityPlatformSignupInvite(...args),
+  getIdentityPlatformAssurance: (...args: unknown[]) => mockGetIdentityPlatformAssurance(...args),
+  getIdentityPlatformSignupInvite: (...args: unknown[]) =>
+    mockGetIdentityPlatformSignupInvite(...args),
   identityPlatformErrorMessage: (error: Error) => error.message,
+  isIdentityPlatformRegistrationInProgress: () => mockIsIdentityPlatformRegistrationInProgress(),
+  isSuppressedIdentityPlatformRegistrationUser: (...args: unknown[]) =>
+    mockIsSuppressedIdentityPlatformRegistrationUser(...args),
   refreshIdentityPlatformToken: (...args: unknown[]) => mockRefreshIdentityPlatformToken(...args),
+  resendIdentityPlatformEmailVerification: (...args: unknown[]) =>
+    mockResendIdentityPlatformEmailVerification(...args),
   signInToIdentityPlatform: (...args: unknown[]) => mockSignInToIdentityPlatform(...args),
   signOutFromIdentityPlatform: (...args: unknown[]) => mockSignOutFromIdentityPlatform(...args),
   subscribeToIdentityPlatform: (...args: unknown[]) => mockSubscribeToIdentityPlatform(...args),
@@ -153,8 +169,17 @@ beforeEach(() => {
     provider: 'identity-platform',
   });
   mockRefreshIdentityPlatformToken.mockResolvedValue('refreshed-identity-token');
+  mockResendIdentityPlatformEmailVerification.mockResolvedValue(undefined);
   mockSignInToIdentityPlatform.mockResolvedValue({ mfaRequired: false });
   mockSignOutFromIdentityPlatform.mockResolvedValue(undefined);
+  mockGetIdentityPlatformAssurance.mockResolvedValue({
+    emailVerified: true,
+    totpEnrolled: true,
+    mfaSatisfied: true,
+  });
+  mockGetIdentityPlatformSignupInvite.mockReturnValue(undefined);
+  mockIsIdentityPlatformRegistrationInProgress.mockReturnValue(false);
+  mockIsSuppressedIdentityPlatformRegistrationUser.mockReturnValue(false);
   mockSubscribeToIdentityPlatform.mockImplementation((_config, onUser, onError) => {
     mockIdentityUserListener = onUser;
     _mockIdentityErrorListener = onError;
@@ -692,6 +717,96 @@ describe('AuthContextProvider - Identity Platform cutover', () => {
     expect(mockGetCanonicalUser).toHaveBeenCalledTimes(1);
     expect(getByTestId('consumer').getAttribute('data-token')).toBe('identity-token');
     expect(getByTestId('consumer').getAttribute('data-user')).toBe('identity-user-1');
+  });
+
+  it('blocks an unverified Identity Platform account before canonical sync', async () => {
+    mockGetIdentityPlatformAssurance.mockResolvedValue({
+      emailVerified: false,
+      totpEnrolled: false,
+      mfaSatisfied: false,
+    });
+    renderProviderLive();
+
+    act(() => {
+      mockIdentityUserListener?.({
+        uid: 'identity-user-1',
+        email: 'owner@example.com',
+        getIdToken: jest.fn(),
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockResendIdentityPlatformEmailVerification).toHaveBeenCalledWith(identityPlatform);
+      expect(mockSignOutFromIdentityPlatform).toHaveBeenCalledWith(identityPlatform);
+      expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true });
+    });
+    expect(mockSyncStaraIdentity).not.toHaveBeenCalled();
+  });
+
+  it('routes a verified account without TOTP to mandatory enrollment', async () => {
+    mockGetIdentityPlatformAssurance.mockResolvedValue({
+      emailVerified: true,
+      totpEnrolled: false,
+      mfaSatisfied: false,
+    });
+    renderProviderLive();
+
+    act(() => {
+      mockIdentityUserListener?.({
+        uid: 'identity-user-1',
+        email: 'owner@example.com',
+        getIdToken: jest.fn(),
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/login/mfa-setup', { replace: true });
+    });
+    expect(mockSignOutFromIdentityPlatform).not.toHaveBeenCalled();
+    expect(mockSyncStaraIdentity).not.toHaveBeenCalled();
+  });
+
+  it('rejects an enrolled session that did not complete the second factor', async () => {
+    mockGetIdentityPlatformAssurance.mockResolvedValue({
+      emailVerified: true,
+      totpEnrolled: true,
+      mfaSatisfied: false,
+    });
+    renderProviderLive();
+
+    act(() => {
+      mockIdentityUserListener?.({
+        uid: 'identity-user-1',
+        email: 'owner@example.com',
+        getIdToken: jest.fn(),
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockSignOutFromIdentityPlatform).toHaveBeenCalledWith(identityPlatform);
+      expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true });
+    });
+    expect(mockSyncStaraIdentity).not.toHaveBeenCalled();
+  });
+
+  it('forwards a stored invitation once and clears it after canonical sync', async () => {
+    mockGetIdentityPlatformSignupInvite.mockReturnValue('invite_token_123456789012345678901234');
+    renderProviderLive();
+
+    act(() => {
+      mockIdentityUserListener?.({
+        uid: 'identity-user-1',
+        email: 'owner@partner.test',
+        getIdToken: jest.fn().mockResolvedValue('identity-token'),
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockSyncStaraIdentity).toHaveBeenCalledWith({
+        invite_token: 'invite_token_123456789012345678901234',
+      });
+      expect(mockClearIdentityPlatformSignupInvite).toHaveBeenCalledWith('owner@partner.test');
+    });
   });
 
   it('clears the prior account before synchronizing a different Firebase subject', async () => {

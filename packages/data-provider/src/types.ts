@@ -737,6 +737,20 @@ export type TRegisterUser = {
   token?: string;
 };
 
+export type TIdentityPlatformSignupEligibilityRequest = {
+  email: string;
+  invite_token?: string;
+};
+
+export type TIdentityPlatformSignupEligibilityResponse = {
+  eligible: true;
+  method: 'allowlisted_domain' | 'invitation';
+};
+
+export type TStaraIdentitySyncRequest = {
+  invite_token?: string;
+};
+
 export type TLoginUser = {
   email: string;
   password: string;

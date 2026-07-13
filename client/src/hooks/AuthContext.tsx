@@ -25,8 +25,14 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import type * as t from 'librechat-data-provider';
 import type { ReactNode } from 'react';
 import {
+  clearIdentityPlatformSignupInvite,
+  getIdentityPlatformAssurance,
+  getIdentityPlatformSignupInvite,
   identityPlatformErrorMessage,
+  isIdentityPlatformRegistrationInProgress,
+  isSuppressedIdentityPlatformRegistrationUser,
   refreshIdentityPlatformToken,
+  resendIdentityPlatformEmailVerification,
   signInToIdentityPlatform,
   signOutFromIdentityPlatform,
   subscribeToIdentityPlatform,
@@ -79,6 +85,7 @@ const AuthContextProvider = ({
   const silentRefreshAttemptedRef = useRef(false);
   const identityPlatformRef = useRef<NonNullable<t.TStartupConfig['identityPlatform']>>();
   const identitySubjectRef = useRef<string | undefined>(undefined);
+  const identityEnrollmentRequiredRef = useRef(false);
   const identitySessionGenerationRef = useRef(0);
   const [user, setUser] = useRecoilState(store.user);
   const logoutRedirectRef = useRef<string | undefined>(undefined);
@@ -339,8 +346,15 @@ const AuthContextProvider = ({
     });
 
     const establishIdentitySession = async (firebaseUser: FirebaseUser | null) => {
+      if (isIdentityPlatformRegistrationInProgress()) {
+        return;
+      }
+      if (firebaseUser && isSuppressedIdentityPlatformRegistrationUser(firebaseUser)) {
+        return;
+      }
       const generation = ++identitySessionGenerationRef.current;
       if (!firebaseUser) {
+        identityEnrollmentRequiredRef.current = false;
         const hadIdentitySession = identitySubjectRef.current != null;
         identitySubjectRef.current = undefined;
         if (hadIdentitySession) {
@@ -357,6 +371,40 @@ const AuthContextProvider = ({
       }
 
       try {
+        const assurance = await getIdentityPlatformAssurance(firebaseUser);
+        if (!assurance.emailVerified) {
+          identitySubjectRef.current = undefined;
+          await resendIdentityPlatformEmailVerification(identityPlatform).catch(() => undefined);
+          await Promise.allSettled([
+            signOutFromIdentityPlatform(identityPlatform),
+            clearIdentityClientState(),
+          ]);
+          doSetError('Verify your email before signing in.');
+          navigate('/login', { replace: true });
+          return;
+        }
+        if (!assurance.totpEnrolled) {
+          identitySubjectRef.current = undefined;
+          identityEnrollmentRequiredRef.current = true;
+          await clearIdentityClientState();
+          if (active && generation === identitySessionGenerationRef.current) {
+            navigate('/login/mfa-setup', { replace: true });
+          }
+          return;
+        }
+        if (identityEnrollmentRequiredRef.current) {
+          return;
+        }
+        if (!assurance.mfaSatisfied) {
+          identitySubjectRef.current = undefined;
+          await Promise.allSettled([
+            signOutFromIdentityPlatform(identityPlatform),
+            clearIdentityClientState(),
+          ]);
+          doSetError('Complete multi-factor sign-in to continue.');
+          navigate('/login', { replace: true });
+          return;
+        }
         if (identitySubjectRef.current !== firebaseUser.uid) {
           identitySubjectRef.current = firebaseUser.uid;
           await clearIdentityClientState();
@@ -366,11 +414,15 @@ const AuthContextProvider = ({
           return;
         }
         setTokenHeader(nextToken);
-        await dataService.syncStaraIdentity();
+        const inviteToken = getIdentityPlatformSignupInvite(firebaseUser.email);
+        await dataService.syncStaraIdentity(
+          inviteToken ? { invite_token: inviteToken } : undefined,
+        );
         const canonicalUser = await dataService.getUser();
         if (!active || generation !== identitySessionGenerationRef.current) {
           return;
         }
+        clearIdentityPlatformSignupInvite(firebaseUser.email);
         setError(undefined);
         setUserContext({
           token: nextToken,
@@ -408,7 +460,7 @@ const AuthContextProvider = ({
       request.setAuthTokenRefreshHandler(undefined);
       unsubscribe();
     };
-  }, [clearIdentityClientState, doSetError, identityPlatform, setUserContext]);
+  }, [clearIdentityClientState, doSetError, identityPlatform, navigate, setUserContext]);
 
   useEffect(() => {
     if (isExternalRedirectRef.current) {
