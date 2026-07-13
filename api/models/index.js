@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { createMethods } = require('@librechat/data-schemas');
 const { matchModelName, findMatchingPattern } = require('@librechat/api');
 const getLogStores = require('~/cache/getLogStores');
+const { createCanonicalAgentMethods } = require('./canonicalAgents');
 const { createCanonicalWorkspaceMethods } = require('./canonicalWorkspace');
 
 const methods = createMethods(mongoose, {
@@ -10,6 +11,7 @@ const methods = createMethods(mongoose, {
   getCache: getLogStores,
 });
 const canonicalWorkspaceMethods = createCanonicalWorkspaceMethods(methods);
+const canonicalAgentMethods = createCanonicalAgentMethods(methods);
 
 const seedDatabase = async () => {
   await methods.initializeRoles();
@@ -21,5 +23,6 @@ const seedDatabase = async () => {
 module.exports = {
   ...methods,
   ...canonicalWorkspaceMethods,
+  ...canonicalAgentMethods,
   seedDatabase,
 };

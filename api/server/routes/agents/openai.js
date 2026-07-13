@@ -25,6 +25,7 @@ const {
 const { configMiddleware } = require('~/server/middleware');
 const {
   checkAgentPermission,
+  canonicalAgentRequestContext,
   preAuthTenantMiddleware,
   requireRemoteAgentAuth,
   checkRemoteAgentsFeature,
@@ -34,6 +35,7 @@ const router = express.Router();
 
 router.use(preAuthTenantMiddleware);
 router.use(requireRemoteAgentAuth);
+router.use(canonicalAgentRequestContext);
 router.use(configMiddleware);
 router.use(checkRemoteAgentsFeature);
 

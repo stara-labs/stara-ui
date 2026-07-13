@@ -16,6 +16,29 @@ const {
   getGroupOwners,
 } = require('~/server/services/GraphApiService');
 const db = require('~/models');
+const {
+  canonicalAgentsEnabled,
+  canonicalPermissionBits,
+  getCanonicalAgentAccess,
+  hasCanonicalAgentPermission,
+  listCanonicalAgentIds,
+} = require('~/models/canonicalAgents');
+
+const isCanonicalAgentResource = (resourceType) =>
+  canonicalAgentsEnabled() &&
+  (resourceType === ResourceType.AGENT || resourceType === ResourceType.REMOTE_AGENT);
+
+const loadCanonicalPermissionUser = async (userId) => {
+  // Identity assurance still comes from the transitional LibreChat auth profile.
+  const user = await db.getUserById(
+    userId,
+    '_id id email username name tenantId idOnTheSource emailVerified twoFactorEnabled',
+  );
+  if (!user) {
+    throw new Error('User principal not found');
+  }
+  return { ...user, id: user.id ?? user._id?.toString() ?? String(userId) };
+};
 
 /** @type {boolean|null} */
 let transactionSupportCache = null;
@@ -148,6 +171,16 @@ const checkPermission = async ({ userId, role, resourceType, resourceId, require
 
     validateResourceType(resourceType);
 
+    if (isCanonicalAgentResource(resourceType)) {
+      const user = await loadCanonicalPermissionUser(userId);
+      return hasCanonicalAgentPermission(
+        user,
+        resourceId?.toString?.() ?? String(resourceId),
+        requiredPermission,
+        resourceType === ResourceType.REMOTE_AGENT,
+      );
+    }
+
     const principals = await db.getUserPrincipals({ userId, role });
 
     if (principals.length === 0) {
@@ -176,6 +209,20 @@ const checkPermission = async ({ userId, role, resourceType, resourceId, require
 const getEffectivePermissions = async ({ userId, role, resourceType, resourceId }) => {
   try {
     validateResourceType(resourceType);
+
+    if (isCanonicalAgentResource(resourceType)) {
+      const user = await loadCanonicalPermissionUser(userId);
+      try {
+        const access = await getCanonicalAgentAccess(
+          user,
+          resourceId?.toString?.() ?? String(resourceId),
+        );
+        return canonicalPermissionBits(access, resourceType === ResourceType.REMOTE_AGENT);
+      } catch (error) {
+        if (error.status === 404) return 0;
+        throw error;
+      }
+    }
 
     const principals = await db.getUserPrincipals({ userId, role });
 
@@ -212,6 +259,25 @@ const getResourcePermissionsMap = async ({ userId, role, resourceType, resourceI
   }
 
   try {
+    if (isCanonicalAgentResource(resourceType)) {
+      const user = await loadCanonicalPermissionUser(userId);
+      const entries = await Promise.all(
+        resourceIds.map(async (resourceId) => {
+          try {
+            const access = await getCanonicalAgentAccess(user, resourceId.toString());
+            return [
+              resourceId.toString(),
+              canonicalPermissionBits(access, resourceType === ResourceType.REMOTE_AGENT),
+            ];
+          } catch (error) {
+            if (error.status === 404) return [resourceId.toString(), 0];
+            throw error;
+          }
+        }),
+      );
+      return new Map(entries.filter(([, permissions]) => permissions > 0));
+    }
+
     // Get user principals (user + groups + public)
     const principals = await db.getUserPrincipals({ userId, role });
 
@@ -250,6 +316,15 @@ const findAccessibleResources = async ({ userId, role, resourceType, requiredPer
 
     validateResourceType(resourceType);
 
+    if (isCanonicalAgentResource(resourceType)) {
+      const user = await loadCanonicalPermissionUser(userId);
+      return listCanonicalAgentIds(
+        user,
+        requiredPermissions,
+        resourceType === ResourceType.REMOTE_AGENT,
+      );
+    }
+
     // Get all principals for the user (user + groups + public)
     const principalsList = await db.getUserPrincipals({ userId, role });
 
@@ -281,6 +356,10 @@ const findPubliclyAccessibleResources = async ({ resourceType, requiredPermissio
     }
 
     validateResourceType(resourceType);
+
+    if (isCanonicalAgentResource(resourceType)) {
+      return [];
+    }
 
     return await db.findPublicResourceIds(resourceType, requiredPermissions);
   } catch (error) {
@@ -674,6 +753,10 @@ const hasPublicPermission = async ({ resourceType, resourceId, requiredPermissio
     }
 
     validateResourceType(resourceType);
+
+    if (isCanonicalAgentResource(resourceType)) {
+      return false;
+    }
 
     // Use public principal to check permissions
     const publicPrincipal = [{ principalType: PrincipalType.PUBLIC }];

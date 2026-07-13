@@ -53,6 +53,7 @@ const { attachOwnerContacts } = require('~/server/services/Agents/ownerContact')
 const { getMCPServersRegistry } = require('~/config');
 const { getLogStores } = require('~/cache');
 const db = require('~/models');
+const { canonicalAgentsEnabled } = require('~/models/canonicalAgents');
 
 const systemTools = {
   [Tools.execute_code]: true,
@@ -444,33 +445,35 @@ const createAgentHandler = async (req, res) => {
 
     const agent = await db.createAgent(agentData);
 
-    try {
-      await Promise.all([
-        grantPermission({
-          principalType: PrincipalType.USER,
-          principalId: userId,
-          resourceType: ResourceType.AGENT,
-          resourceId: agent._id,
-          accessRoleId: AccessRoleIds.AGENT_OWNER,
-          grantedBy: userId,
-        }),
-        grantPermission({
-          principalType: PrincipalType.USER,
-          principalId: userId,
-          resourceType: ResourceType.REMOTE_AGENT,
-          resourceId: agent._id,
-          accessRoleId: AccessRoleIds.REMOTE_AGENT_OWNER,
-          grantedBy: userId,
-        }),
-      ]);
-      logger.debug(
-        `[createAgent] Granted owner permissions to user ${userId} for agent ${agent.id}`,
-      );
-    } catch (permissionError) {
-      logger.error(
-        `[createAgent] Failed to grant owner permissions for agent ${agent.id}:`,
-        permissionError,
-      );
+    if (!canonicalAgentsEnabled()) {
+      try {
+        await Promise.all([
+          grantPermission({
+            principalType: PrincipalType.USER,
+            principalId: userId,
+            resourceType: ResourceType.AGENT,
+            resourceId: agent._id,
+            accessRoleId: AccessRoleIds.AGENT_OWNER,
+            grantedBy: userId,
+          }),
+          grantPermission({
+            principalType: PrincipalType.USER,
+            principalId: userId,
+            resourceType: ResourceType.REMOTE_AGENT,
+            resourceId: agent._id,
+            accessRoleId: AccessRoleIds.REMOTE_AGENT_OWNER,
+            grantedBy: userId,
+          }),
+        ]);
+        logger.debug(
+          `[createAgent] Granted owner permissions to user ${userId} for agent ${agent.id}`,
+        );
+      } catch (permissionError) {
+        logger.error(
+          `[createAgent] Failed to grant owner permissions for agent ${agent.id}:`,
+          permissionError,
+        );
+      }
     }
 
     res.status(201).json(agent);
@@ -523,14 +526,15 @@ const getAgentHandler = async (req, res, expandProperties = false) => {
     agent.author = agent.author.toString();
 
     // Check if agent is public
-    const isPublic = await hasPublicPermission({
-      resourceType: ResourceType.AGENT,
-      resourceId: agent._id,
-      requiredPermissions: PermissionBits.VIEW,
-    });
-    agent.isPublic = isPublic;
-
-    await attachOwnerContacts([agent]);
+    if (!canonicalAgentsEnabled()) {
+      const isPublic = await hasPublicPermission({
+        resourceType: ResourceType.AGENT,
+        resourceId: agent._id,
+        requiredPermissions: PermissionBits.VIEW,
+      });
+      agent.isPublic = isPublic;
+      await attachOwnerContacts([agent]);
+    }
 
     if (agent.author !== author) {
       delete agent.author;
@@ -759,13 +763,17 @@ const updateAgentHandler = async (req, res) => {
         : existingAgent;
 
     // Add version count to the response
-    updatedAgent.version = updatedAgent.versions ? updatedAgent.versions.length : 0;
+    if (!canonicalAgentsEnabled()) {
+      updatedAgent.version = updatedAgent.versions ? updatedAgent.versions.length : 0;
+    }
 
     if (updatedAgent.author) {
       updatedAgent.author = updatedAgent.author.toString();
     }
 
-    await attachOwnerContacts([updatedAgent]);
+    if (!canonicalAgentsEnabled()) {
+      await attachOwnerContacts([updatedAgent]);
+    }
 
     if (updatedAgent.author !== req.user.id) {
       delete updatedAgent.author;
@@ -803,6 +811,13 @@ const duplicateAgentHandler = async (req, res) => {
   const { id } = req.params;
   const { id: userId } = req.user;
   const sensitiveFields = ['api_key', 'oauth_client_id', 'oauth_client_secret'];
+
+  if (canonicalAgentsEnabled()) {
+    return res.status(501).json({
+      error: 'Canonical agent duplication is pending governed Action migration',
+      status: 'error',
+    });
+  }
 
   try {
     const agent = await db.getAgent({ id });
@@ -1031,6 +1046,17 @@ const getListAgentsHandler = async (req, res) => {
       filter.$or = [{ name: regex }, { description: regex }];
     }
 
+    if (canonicalAgentsEnabled()) {
+      const data = await db.getListAgentsByAccess({
+        otherParams: filter,
+        limit,
+        after: cursor,
+        includeSkillConfig: true,
+        requiredPermission,
+      });
+      return res.json(data);
+    }
+
     // Get agent IDs the user has VIEW access to via ACL
     const accessibleIds = await findAccessibleResources({
       userId,
@@ -1211,7 +1237,9 @@ const uploadAgentAvatarHandler = async (req, res) => {
     const updatedAgent = await db.updateAgent({ id: agent_id }, data, {
       updatingUserId: req.user.id,
     });
-    await attachOwnerContacts([updatedAgent]);
+    if (!canonicalAgentsEnabled()) {
+      await attachOwnerContacts([updatedAgent]);
+    }
 
     try {
       const avatarCache = getLogStores(CacheKeys.S3_EXPIRY_INTERVAL);
@@ -1317,7 +1345,9 @@ const revertAgentVersionHandler = async (req, res) => {
       updatedAgent.author = updatedAgent.author.toString();
     }
 
-    await attachOwnerContacts([updatedAgent]);
+    if (!canonicalAgentsEnabled()) {
+      await attachOwnerContacts([updatedAgent]);
+    }
 
     if (updatedAgent.author !== req.user.id) {
       delete updatedAgent.author;

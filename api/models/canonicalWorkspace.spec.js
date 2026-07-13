@@ -16,6 +16,7 @@ const USER_ID = 'user_maya';
 const TENANT_ID = 'tenant_acme';
 const CONVERSATION_ID = '11111111-1111-4111-8111-111111111111';
 const MESSAGE_ID = '22222222-2222-4222-8222-222222222222';
+const AGENT_ID = '55555555-5555-4555-8555-555555555555';
 
 describe('canonical workspace model adapter', () => {
   const originalEnabled = process.env.STARA_CANONICAL_WORKSPACE;
@@ -264,6 +265,25 @@ describe('canonical workspace model adapter', () => {
     expect(callStaraApi.mock.calls.some(([, path]) => path.startsWith('/v1/conversations?'))).toBe(
       false,
     );
+  });
+
+  it('translates persisted agent UUIDs to LibreChat agent IDs in both directions', async () => {
+    callStaraApi.mockImplementation(async (_user, path, options = {}) => {
+      if (path === `/v1/conversations/${CONVERSATION_ID}` && options.method === 'PATCH') {
+        expect(options.body.agent_id).toBe(AGENT_ID);
+        return { conversation: canonicalConversation({ agent_id: AGENT_ID }) };
+      }
+      if (path === `/v1/conversations/${CONVERSATION_ID}`) {
+        return { conversation: canonicalConversation() };
+      }
+      throw new Error(`Unexpected Stara API call: ${options.method ?? 'GET'} ${path}`);
+    });
+    const methods = createCanonicalWorkspaceMethods(baseMethods());
+    const conversation = await methods.saveConvo(
+      { userId: USER_ID },
+      { conversationId: CONVERSATION_ID, agent_id: `agent_${AGENT_ID}` },
+    );
+    expect(conversation.agent_id).toBe(`agent_${AGENT_ID}`);
   });
 });
 

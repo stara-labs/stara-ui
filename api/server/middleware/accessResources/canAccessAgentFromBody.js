@@ -10,7 +10,9 @@ const {
 } = require('librechat-data-provider');
 const { checkPermission } = require('~/server/services/PermissionService');
 const { canAccessResource } = require('./canAccessResource');
+const { checkCanonicalAgentRouteAccess } = require('./canonicalAgentAccess');
 const db = require('~/models');
+const { canonicalAgentsEnabled } = require('~/models/canonicalAgents');
 
 const { getRoleByName, getAgent } = db;
 
@@ -38,6 +40,16 @@ const resolveAgentIdFromBody = async (agentCustomId) => {
  * @returns {Promise<void>}
  */
 const checkAgentResourceAccess = (agentId, requiredPermission, req, res, continuation) => {
+  if (canonicalAgentsEnabled()) {
+    return checkCanonicalAgentRouteAccess({
+      req,
+      res,
+      next: continuation,
+      agentId,
+      requiredPermission,
+      invoke: true,
+    });
+  }
   const middleware = canAccessResource({
     resourceType: ResourceType.AGENT,
     requiredPermission,
@@ -94,6 +106,20 @@ const checkAddedConvoAccess = (requiredPermission) => async (req, res, next) => 
 
     if (req.user.role === SystemRoles.ADMIN) {
       return next();
+    }
+
+    if (canonicalAgentsEnabled()) {
+      return checkCanonicalAgentRouteAccess({
+        req,
+        res,
+        agentId: addedAgentId,
+        requiredPermission,
+        invoke: true,
+        next: async () => {
+          req.resolvedAddedAgent = await getAgent({ id: addedAgentId });
+          return next();
+        },
+      });
     }
 
     const agent = await resolveAgentIdFromBody(addedAgentId);
