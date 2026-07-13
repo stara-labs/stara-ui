@@ -99,6 +99,43 @@ function IdentityPlatformVerifyEmail({
   );
 }
 
+function IdentityPlatformPasswordResetRedirect({ params }: { params: URLSearchParams }) {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const search = params.toString();
+    navigate(`/reset-password${search ? `?${search}` : ''}`, { replace: true });
+  }, [navigate, params]);
+
+  return (
+    <VerificationShell>
+      <Spinner className="size-8 text-green-500" />
+    </VerificationShell>
+  );
+}
+
+function UnsupportedIdentityPlatformEmailAction() {
+  const navigate = useNavigate();
+  const localize = useLocalize();
+
+  return (
+    <VerificationShell>
+      <div className="flex max-w-md flex-col items-center gap-5 text-center">
+        <h1 className="text-2xl font-semibold text-text-primary">
+          {localize('com_auth_email_verification_invalid')}
+        </h1>
+        <button
+          type="button"
+          onClick={() => navigate('/login', { replace: true })}
+          className="font-medium text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+        >
+          {localize('com_auth_back_to_login')}
+        </button>
+      </div>
+    </VerificationShell>
+  );
+}
+
 function LegacyVerifyEmail() {
   const navigate = useNavigate();
   const localize = useLocalize();
@@ -228,6 +265,13 @@ function VerifyEmail() {
     );
   }
   if (startupConfig.data?.identityPlatform) {
+    const mode = params.get('mode');
+    if (mode === 'resetPassword') {
+      return <IdentityPlatformPasswordResetRedirect params={params} />;
+    }
+    if (mode && mode !== 'verifyEmail') {
+      return <UnsupportedIdentityPlatformEmailAction />;
+    }
     return (
       <IdentityPlatformVerifyEmail config={startupConfig.data.identityPlatform} params={params} />
     );
