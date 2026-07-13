@@ -2,9 +2,14 @@ const { isEnabled } = require('@librechat/api');
 const { Constants, ViolationTypes, Time } = require('librechat-data-provider');
 const denyRequest = require('~/server/middleware/denyRequest');
 const { logViolation, getLogStores } = require('~/cache');
-const { searchConversation } = require('~/models');
+const { getConvo, searchConversation } = require('~/models');
 
 const { USE_REDIS, CONVO_ACCESS_VIOLATION_SCORE: score = 0 } = process.env ?? {};
+const canonicalWorkspaceEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.STARA_CANONICAL_WORKSPACE ?? '')
+    .trim()
+    .toLowerCase(),
+);
 
 /**
  * Helper function to get conversationId from different request body structures.
@@ -51,10 +56,12 @@ const validateConvoAccess = async (req, res, next) => {
       }
     }
 
-    const conversation = await searchConversation(conversationId);
+    const conversation = canonicalWorkspaceEnabled
+      ? await getConvo(userId, conversationId)
+      : await searchConversation(conversationId);
 
     if (!conversation) {
-      return next();
+      return canonicalWorkspaceEnabled ? res.status(404).end() : next();
     }
 
     if (conversation.user !== userId) {

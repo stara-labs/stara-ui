@@ -800,6 +800,7 @@ class BaseClient {
         userMessage.tokenCount = calibrated;
         await this.updateMessageInDatabase({
           messageId: userMessage.messageId,
+          conversationId: userMessage.conversationId,
           tokenCount: calibrated,
         });
       }

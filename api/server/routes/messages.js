@@ -371,7 +371,12 @@ router.put('/:conversationId/:messageId', validateMessageReq, async (req, res) =
         existing?.isCreatedByUser === true,
       );
       const tokenCount = await countTokens(textToCount, model);
-      const result = await db.updateMessage(req?.user?.id, { messageId, text, tokenCount });
+      const result = await db.updateMessage(req?.user?.id, {
+        conversationId,
+        messageId,
+        text,
+        tokenCount,
+      });
       return res.status(200).json(result);
     }
 
@@ -412,6 +417,7 @@ router.put('/:conversationId/:messageId', validateMessageReq, async (req, res) =
     }
 
     const result = await db.updateMessage(req?.user?.id, {
+      conversationId,
       messageId,
       content: updatedContent,
       tokenCount,
@@ -435,6 +441,7 @@ router.put(
       const updatedMessage = await db.updateMessage(
         req?.user?.id,
         {
+          conversationId,
           messageId,
           feedback: feedback || null,
         },
