@@ -63,6 +63,10 @@ export function getStaraOnboardingContext(): Promise<t.TStaraOnboardingContext> 
   return request.get(endpoints.staraOnboardingContext());
 }
 
+export function syncStaraIdentity(): Promise<unknown> {
+  return request.post(endpoints.staraIdentitySync());
+}
+
 export function saveStaraOnboarding(
   payload: t.TSaveStaraOnboardingRequest,
 ): Promise<t.TStaraOnboardingContext> {

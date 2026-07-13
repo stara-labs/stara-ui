@@ -68,6 +68,9 @@ const AUTH_REDIRECT_DEDUPE_MS = 15_000;
 const TOKEN_REFRESH_BUFFER_MS = 2 * 60 * 1000;
 
 type RetryableAxiosRequestConfig = AxiosRequestConfig & { _retry?: boolean };
+type AuthTokenRefreshHandler = (forceRefresh: boolean) => Promise<string | null>;
+
+let authTokenRefreshHandler: AuthTokenRefreshHandler | undefined;
 
 type AuthRecoveryState = {
   lastRedirectStartedAt: number;
@@ -78,8 +81,17 @@ type AuthRecoveryWindow = Window & {
   __librechatAuthRecovery?: AuthRecoveryState;
 };
 
-const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefined> =>
-  _post(endpoints.refreshToken(retry));
+const setAuthTokenRefreshHandler = (handler?: AuthTokenRefreshHandler) => {
+  authTokenRefreshHandler = handler;
+};
+
+const refreshToken = async (retry?: boolean): Promise<t.TRefreshTokenResponse | undefined> => {
+  if (authTokenRefreshHandler) {
+    const token = await authTokenRefreshHandler(retry === true);
+    return token ? ({ token } as t.TRefreshTokenResponse) : undefined;
+  }
+  return _post(endpoints.refreshToken(retry));
+};
 
 const SHARE_PAGE_PATH_REGEX = /^\/share\/[^/]+\/?$/;
 const SHARED_MESSAGES_PATH_REGEX = /^\/api\/share\/[^/]+$/;
@@ -385,5 +397,6 @@ export default {
   deleteWithOptions: _deleteWithOptions,
   patch: _patch,
   refreshToken,
+  setAuthTokenRefreshHandler,
   dispatchTokenUpdatedEvent,
 };

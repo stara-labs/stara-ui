@@ -447,6 +447,7 @@ export type TUser = {
   provider: string;
   tenantId?: string;
   plugins?: string[];
+  emailVerified?: boolean;
   twoFactorEnabled?: boolean;
   backupCodes?: TBackupCode[];
   personalization?: {

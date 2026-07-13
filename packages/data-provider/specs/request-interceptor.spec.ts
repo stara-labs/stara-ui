@@ -20,6 +20,7 @@ import { setTokenHeader } from '../src/headers-helpers';
 const mockAdapter = jest.fn();
 let originalAdapter: typeof axios.defaults.adapter;
 let savedLocation: Location;
+let request: typeof import('../src/request').default;
 
 type RetryableAdapterConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -74,7 +75,7 @@ beforeAll(async () => {
   originalAdapter = axios.defaults.adapter;
   axios.defaults.adapter = mockAdapter;
 
-  await import('../src/request');
+  request = (await import('../src/request')).default;
 });
 
 beforeEach(() => {
@@ -87,6 +88,7 @@ afterAll(() => {
 });
 
 afterEach(() => {
+  request.setAuthTokenRefreshHandler(undefined);
   delete axios.defaults.headers.common['Authorization'];
   window.localStorage.clear();
   delete (window as Window & { __librechatAuthRecovery?: unknown }).__librechatAuthRecovery;
@@ -657,6 +659,24 @@ describe('axios 401 interceptor — Authorization header guard', () => {
     expect(mockAdapter.mock.calls[0][0].url).toContain('/api/auth/refresh');
     expect(mockAdapter.mock.calls[1][0].url).toBe('/api/messages');
     expect(mockAdapter.mock.calls[1][0].headers?.Authorization).toBe('Bearer fresh-token');
+  });
+
+  it('uses an injected identity token provider instead of the legacy refresh endpoint', async () => {
+    setTokenHeader(createJwt(Date.now() + 60_000));
+    const refreshIdentityToken = jest.fn().mockResolvedValue('identity-token');
+    request.setAuthTokenRefreshHandler(refreshIdentityToken);
+    mockAdapter.mockImplementation((config: InternalAxiosRequestConfig) =>
+      createAdapterResponse(config, { ok: true }),
+    );
+
+    const response = await axios.get('/api/messages');
+
+    expect(response.data).toEqual({ ok: true });
+    expect(refreshIdentityToken).toHaveBeenCalledWith(false);
+    expect(getCallsForUrl('/api/auth/refresh')).toHaveLength(0);
+    expect(getCallsForUrl('/api/messages')[0][0].headers?.Authorization).toBe(
+      'Bearer identity-token',
+    );
   });
 
   it('does not wait on the in-flight recovery when the refresh request itself fails', async () => {

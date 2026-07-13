@@ -16,6 +16,7 @@ const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const { getLdapConfig } = require('~/server/services/Config/ldap');
 const { getRumConfig } = require('~/server/services/Config/rum');
 const { getAppConfig } = require('~/server/services/Config/app');
+const { identityPlatformWebConfig } = require('~/server/services/IdentityPlatformService');
 
 const router = express.Router();
 const emailLoginEnabled =
@@ -51,13 +52,17 @@ function isBirthday() {
  * See client consumers under `client/src/components/Auth/` and `client/src/routes/Layouts/Startup.tsx`.
  */
 function buildPreLoginPayload() {
+  const identityPlatform = identityPlatformWebConfig();
+  const inheritedAuthEnabled = !identityPlatform?.enabled;
   const isOpenIdEnabled =
+    inheritedAuthEnabled &&
     !!process.env.OPENID_CLIENT_ID &&
     (isEnabled(process.env.OPENID_USE_PKCE) || !!process.env.OPENID_CLIENT_SECRET?.trim()) &&
     !!process.env.OPENID_ISSUER &&
     !!process.env.OPENID_SESSION_SECRET;
 
   const isSamlEnabled =
+    inheritedAuthEnabled &&
     !!process.env.SAML_ENTRY_POINT &&
     !!process.env.SAML_ISSUER &&
     !!process.env.SAML_CERT &&
@@ -68,11 +73,20 @@ function buildPreLoginPayload() {
   /** @type {Partial<TStartupConfig>} */
   const payload = {
     appTitle: process.env.APP_TITLE || 'Stara',
-    discordLoginEnabled: !!process.env.DISCORD_CLIENT_ID && !!process.env.DISCORD_CLIENT_SECRET,
-    facebookLoginEnabled: !!process.env.FACEBOOK_CLIENT_ID && !!process.env.FACEBOOK_CLIENT_SECRET,
-    githubLoginEnabled: !!process.env.GITHUB_CLIENT_ID && !!process.env.GITHUB_CLIENT_SECRET,
-    googleLoginEnabled: !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
+    discordLoginEnabled:
+      inheritedAuthEnabled &&
+      !!process.env.DISCORD_CLIENT_ID &&
+      !!process.env.DISCORD_CLIENT_SECRET,
+    facebookLoginEnabled:
+      inheritedAuthEnabled &&
+      !!process.env.FACEBOOK_CLIENT_ID &&
+      !!process.env.FACEBOOK_CLIENT_SECRET,
+    githubLoginEnabled:
+      inheritedAuthEnabled && !!process.env.GITHUB_CLIENT_ID && !!process.env.GITHUB_CLIENT_SECRET,
+    googleLoginEnabled:
+      inheritedAuthEnabled && !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
     appleLoginEnabled:
+      inheritedAuthEnabled &&
       !!process.env.APPLE_CLIENT_ID &&
       !!process.env.APPLE_TEAM_ID &&
       !!process.env.APPLE_KEY_ID &&
@@ -85,14 +99,16 @@ function buildPreLoginPayload() {
     samlLabel: process.env.SAML_BUTTON_LABEL,
     samlImageUrl: process.env.SAML_IMAGE_URL,
     serverDomain: process.env.DOMAIN_SERVER || 'http://localhost:3080',
-    emailLoginEnabled,
-    registrationEnabled: !ldap?.enabled && isEnabled(process.env.ALLOW_REGISTRATION),
-    socialLoginEnabled: isEnabled(process.env.ALLOW_SOCIAL_LOGIN),
+    emailLoginEnabled: identityPlatform?.enabled || emailLoginEnabled,
+    registrationEnabled:
+      inheritedAuthEnabled && !ldap?.enabled && isEnabled(process.env.ALLOW_REGISTRATION),
+    socialLoginEnabled: inheritedAuthEnabled && isEnabled(process.env.ALLOW_SOCIAL_LOGIN),
     emailEnabled:
       (!!process.env.MAILGUN_API_KEY && !!process.env.MAILGUN_DOMAIN && !!process.env.EMAIL_FROM) ||
       (!!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM) ||
       ((!!process.env.EMAIL_SERVICE || !!process.env.EMAIL_HOST) && !!process.env.EMAIL_FROM),
-    passwordResetEnabled,
+    passwordResetEnabled: inheritedAuthEnabled && passwordResetEnabled,
+    ...(identityPlatform ? { identityPlatform } : {}),
   };
 
   const minPasswordLength = parseInt(process.env.MIN_PASSWORD_LENGTH, 10);

@@ -10,6 +10,7 @@ const {
   acceptStaraTenantInviteController,
   activateStaraTenantController,
   getStaraOnboardingContextController,
+  syncStaraIdentityController,
   saveStaraOnboardingController,
 } = require('./StaraOnboardingController');
 
@@ -58,6 +59,24 @@ describe('StaraOnboardingController canonical API proxy', () => {
       requiresOnboarding: false,
       requiresTenantAddendum: true,
     });
+  });
+
+  it('synchronizes a verified browser identity without loading organization context', async () => {
+    mockFetchJson(accountResponse());
+    const res = makeRes();
+
+    await syncStaraIdentityController(makeReq(), res);
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      'http://stara-api:3081/v1/identity/sync',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ display_name: 'Maya' }),
+      }),
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ user: expect.any(Object) }));
   });
 
   it('stores bounded onboarding answers through stara-api', async () => {

@@ -10,6 +10,7 @@ const {
 } = require('~/server/controllers/SkillStatesController');
 const {
   getStaraOnboardingContextController,
+  syncStaraIdentityController,
   saveStaraOnboardingController,
   acceptStaraTenantInviteController,
   activateStaraTenantController,
@@ -37,6 +38,7 @@ router.post('/favorites', requireJwtAuth, updateFavoritesController);
 router.get('/skills/active', requireJwtAuth, getSkillStatesController);
 router.post('/skills/active', requireJwtAuth, updateSkillStatesController);
 router.get('/onboarding/stara/context', requireJwtAuth, getStaraOnboardingContextController);
+router.post('/onboarding/stara/identity/sync', requireJwtAuth, syncStaraIdentityController);
 router.put('/onboarding/stara', requireJwtAuth, saveStaraOnboardingController);
 router.post(
   '/onboarding/stara/invites/:inviteId/accept',

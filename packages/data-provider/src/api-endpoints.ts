@@ -442,6 +442,7 @@ export const skillStates = () => `${BASE_URL}/api/user/settings/skills/active`;
 export const staraOnboardingContext = () =>
   `${BASE_URL}/api/user/settings/onboarding/stara/context`;
 export const staraOnboarding = () => `${BASE_URL}/api/user/settings/onboarding/stara`;
+export const staraIdentitySync = () => `${staraOnboarding()}/identity/sync`;
 export const staraTenantActivate = (tenantId: string) =>
   `${staraOnboarding()}/tenants/${encodeURIComponent(tenantId)}/activate`;
 
