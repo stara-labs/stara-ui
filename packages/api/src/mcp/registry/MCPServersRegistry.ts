@@ -116,6 +116,15 @@ interface ResolvedMCPAllowlists {
   allowedAddresses?: string[] | null;
 }
 
+interface RuntimeServerConfigsRepository extends IServerConfigsRepositoryInterface {
+  add(
+    serverName: string,
+    config: t.ParsedServerConfig,
+    userId?: string,
+    reservedServerNames?: Iterable<string>,
+  ): Promise<t.AddServerResult>;
+}
+
 /**
  * Central registry for managing MCP server configurations.
  * Authoritative source of truth for all MCP servers provided by LibreChat.
@@ -130,7 +139,7 @@ interface ResolvedMCPAllowlists {
 export class MCPServersRegistry {
   private static instance: MCPServersRegistry;
 
-  private readonly dbConfigsRepo: IServerConfigsRepositoryInterface;
+  private readonly dbConfigsRepo: RuntimeServerConfigsRepository;
   private readonly dynamicServersEnabled: boolean;
   private readonly cacheConfigsRepo: IServerConfigsRepositoryInterface;
   private readonly configCacheRepo: IServerConfigsRepositoryInterface;

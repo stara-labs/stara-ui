@@ -15,27 +15,32 @@ export class DynamicMCPServersDisabledError extends Error {
  * Postgres metadata and Secret Manager references are not materialized in the UI process.
  */
 export class DisabledServerConfigsRepository implements IServerConfigsRepositoryInterface {
-  async add(): Promise<AddServerResult> {
+  async add(
+    _serverName: string,
+    _config: ParsedServerConfig,
+    _userId?: string,
+    _reservedServerNames?: Iterable<string>,
+  ): Promise<AddServerResult> {
     throw new DynamicMCPServersDisabledError();
   }
 
-  async update(): Promise<void> {
+  async update(_serverName: string, _config: ParsedServerConfig, _userId?: string): Promise<void> {
     throw new DynamicMCPServersDisabledError();
   }
 
-  async upsert(): Promise<void> {
+  async upsert(_serverName: string, _config: ParsedServerConfig, _userId?: string): Promise<void> {
     throw new DynamicMCPServersDisabledError();
   }
 
-  async remove(): Promise<void> {
+  async remove(_serverName: string, _userId?: string): Promise<void> {
     throw new DynamicMCPServersDisabledError();
   }
 
-  async get(): Promise<ParsedServerConfig | undefined> {
+  async get(_serverName: string, _userId?: string): Promise<ParsedServerConfig | undefined> {
     return undefined;
   }
 
-  async getAll(): Promise<Record<string, ParsedServerConfig>> {
+  async getAll(_userId?: string, _role?: string): Promise<Record<string, ParsedServerConfig>> {
     return {};
   }
 
