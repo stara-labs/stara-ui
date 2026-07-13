@@ -93,6 +93,29 @@ const checkMCPCreate = generateCheckAccess({
   getRoleByName: db.getRoleByName,
 });
 
+const dynamicServerManagementEnabled = () =>
+  getMCPServersRegistry().isDynamicServerManagementEnabled?.() !== false;
+
+const requireDynamicServerManagement = (req, res, next) => {
+  if (dynamicServerManagementEnabled()) {
+    return next();
+  }
+  return res.status(403).json({
+    error: 'MCP_DYNAMIC_SERVERS_DISABLED',
+    message: 'Dynamic MCP server management is disabled in canonical Stara mode.',
+  });
+};
+
+const canonicalAwareMCPServerAccess = (options) => {
+  const legacyMiddleware = canAccessMCPServerResource(options);
+  return (req, res, next) => {
+    if (!dynamicServerManagementEnabled()) {
+      return next();
+    }
+    return legacyMiddleware(req, res, next);
+  };
+};
+
 /**
  * Get all MCP tools available to the user
  * Returns only MCP tools, completely decoupled from regular LibreChat tools
@@ -974,6 +997,7 @@ router.post(
   requireJwtAuth,
   requireStaraAssurance,
   checkMCPCreate,
+  requireDynamicServerManagement,
   createMCPServerController,
 );
 
@@ -988,7 +1012,7 @@ router.get(
   requireJwtAuth,
   requireStaraAssurance,
   checkMCPUsePermissions,
-  canAccessMCPServerResource({
+  canonicalAwareMCPServerAccess({
     requiredPermission: PermissionBits.VIEW,
     resourceIdParam: 'serverName',
   }),
@@ -1007,6 +1031,7 @@ router.patch(
   requireJwtAuth,
   requireStaraAssurance,
   checkMCPCreate,
+  requireDynamicServerManagement,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.EDIT,
     resourceIdParam: 'serverName',
@@ -1025,6 +1050,7 @@ router.delete(
   requireJwtAuth,
   requireStaraAssurance,
   checkMCPCreate,
+  requireDynamicServerManagement,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.DELETE,
     resourceIdParam: 'serverName',

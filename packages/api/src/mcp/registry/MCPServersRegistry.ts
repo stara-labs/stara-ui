@@ -8,6 +8,7 @@ import {
   APP_CACHE_NAMESPACE,
   CONFIG_CACHE_NAMESPACE,
 } from './cache/ServerConfigsCacheFactory';
+import { DisabledServerConfigsRepository } from './db/DisabledServerConfigsRepository';
 import { MCPInspectionFailedError, isMCPDomainNotAllowedError } from '~/mcp/errors';
 import { MCPServerInspector } from './MCPServerInspector';
 import { ServerConfigsDB } from './db/ServerConfigsDB';
@@ -16,6 +17,17 @@ import { withTimeout } from '~/utils';
 
 /** How long a failure stub is considered fresh before re-attempting inspection (5 minutes). */
 const CONFIG_STUB_RETRY_MS = 5 * 60 * 1000;
+
+export function canonicalMcpServersEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env.STARA_CANONICAL_MCP_SERVERS?.trim().toLowerCase();
+  if (value == null || value === '' || value === 'false' || value === '0') {
+    return false;
+  }
+  if (value === 'true' || value === '1') {
+    return true;
+  }
+  throw new Error('STARA_CANONICAL_MCP_SERVERS must be true, false, 1, or 0.');
+}
 
 /**
  * Fields an admin override can legitimately set. Used to detect whether a
@@ -111,14 +123,15 @@ interface ResolvedMCPAllowlists {
  * Uses a three-layer architecture:
  * - YAML Cache (cacheConfigsRepo): Operator-defined configs loaded at startup (in-memory or Redis)
  * - Config Cache (configCacheRepo): Admin-defined configs from Config overrides, lazily initialized
- * - DB Repository (dbConfigsRepo): User-provided configs created at runtime (MongoDB + ACL)
+ * - Runtime Repository (dbConfigsRepo): Legacy Mongo user configs, or disabled in canonical Stara mode
  *
- * Query priority: Config cache → YAML cache → DB.
+ * Query priority: Config cache → YAML cache → runtime repository.
  */
 export class MCPServersRegistry {
   private static instance: MCPServersRegistry;
 
-  private readonly dbConfigsRepo: ServerConfigsDB;
+  private readonly dbConfigsRepo: IServerConfigsRepositoryInterface;
+  private readonly dynamicServersEnabled: boolean;
   private readonly cacheConfigsRepo: IServerConfigsRepositoryInterface;
   private readonly configCacheRepo: IServerConfigsRepositoryInterface;
   /** YAML-derived base allowlists; used at boot and as the fallback when no resolver is set. */
@@ -148,8 +161,12 @@ export class MCPServersRegistry {
     allowedDomains?: string[] | null,
     allowedAddresses?: string[] | null,
     allowlistResolver?: MCPAllowlistResolver,
+    options: { disableDatabaseServers?: boolean } = {},
   ) {
-    this.dbConfigsRepo = new ServerConfigsDB(mongoose);
+    this.dynamicServersEnabled = options.disableDatabaseServers !== true;
+    this.dbConfigsRepo = this.dynamicServersEnabled
+      ? new ServerConfigsDB(mongoose)
+      : new DisabledServerConfigsRepository();
     this.cacheConfigsRepo = ServerConfigsCacheFactory.create(APP_CACHE_NAMESPACE, false);
     this.configCacheRepo = ServerConfigsCacheFactory.create(CONFIG_CACHE_NAMESPACE, false);
     this.allowedDomains = allowedDomains;
@@ -192,6 +209,7 @@ export class MCPServersRegistry {
       allowedDomains,
       allowedAddresses,
       allowlistResolver,
+      { disableDatabaseServers: canonicalMcpServersEnabled(process.env) },
     );
     return MCPServersRegistry.instance;
   }
@@ -212,6 +230,10 @@ export class MCPServersRegistry {
   /** YAML base allowlist (boot/fallback). For request-time decisions use {@link resolveAllowlists}. */
   public getAllowedAddresses(): string[] | null | undefined {
     return this.allowedAddresses;
+  }
+
+  public isDynamicServerManagementEnabled(): boolean {
+    return this.dynamicServersEnabled;
   }
 
   /** Returns true when no explicit allowedDomains allowlist is configured, enabling SSRF TOCTOU protection */
