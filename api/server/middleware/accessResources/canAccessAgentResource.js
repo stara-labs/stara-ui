@@ -1,6 +1,8 @@
 const { ResourceType } = require('librechat-data-provider');
 const { canAccessResource } = require('./canAccessResource');
+const { checkCanonicalAgentRouteAccess } = require('./canonicalAgentAccess');
 const { getAgent } = require('~/models');
+const { canonicalAgentsEnabled } = require('~/models/canonicalAgents');
 
 /**
  * Agent ID resolver function
@@ -46,12 +48,32 @@ const canAccessAgentResource = (options) => {
     throw new Error('canAccessAgentResource: requiredPermission is required and must be a number');
   }
 
-  return canAccessResource({
+  const legacyMiddleware = canAccessResource({
     resourceType: ResourceType.AGENT,
     requiredPermission,
     resourceIdParam,
     idResolver: resolveAgentId,
   });
+
+  return (req, res, next) => {
+    if (!canonicalAgentsEnabled()) {
+      return legacyMiddleware(req, res, next);
+    }
+    const agentId = req.params[resourceIdParam];
+    if (!agentId) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `${resourceIdParam} is required`,
+      });
+    }
+    return checkCanonicalAgentRouteAccess({
+      req,
+      res,
+      next,
+      agentId,
+      requiredPermission,
+    });
+  };
 };
 
 module.exports = {

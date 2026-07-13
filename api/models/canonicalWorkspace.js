@@ -1,5 +1,6 @@
 const { logger } = require('@librechat/data-schemas');
 const { callStaraApi, getUserId, safeString } = require('~/server/services/StaraServiceClient');
+const { canonicalAgentId, libreChatAgentId } = require('./canonicalAgents');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_LIST_LIMIT = 100;
@@ -394,8 +395,10 @@ const conversationPatch = (data) => {
   if (typeof data.pinned === 'boolean') {
     patch.metadata = { pinned: data.pinned };
   }
-  if (data.agent_id === null || UUID_PATTERN.test(data.agent_id ?? '')) {
-    patch.agent_id = data.agent_id;
+  if (data.agent_id === null) {
+    patch.agent_id = null;
+  } else if (canonicalAgentId(data.agent_id)) {
+    patch.agent_id = canonicalAgentId(data.agent_id);
   }
   const route = safeString(data.model, undefined, 200);
   if (route) {
@@ -526,7 +529,7 @@ const mapConversation = (conversation, user) => ({
   endpoint: process.env.STARA_CANONICAL_ENDPOINT ?? DEFAULT_ENDPOINT,
   endpointType: 'custom',
   model: conversation.model_route ?? undefined,
-  agent_id: conversation.agent_id ?? undefined,
+  agent_id: conversation.agent_id ? libreChatAgentId(conversation.agent_id) : undefined,
   isArchived: conversation.status === 'archived',
   pinned: Boolean(conversation.metadata?.pinned),
   createdAt: conversation.created_at,
