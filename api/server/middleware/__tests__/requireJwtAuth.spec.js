@@ -15,6 +15,7 @@ const jwt = require('jsonwebtoken');
 let mockPassportError = null;
 let mockRegisteredStrategies = new Set(['jwt']);
 let mockCanonicalIdentityEnabled = false;
+let mockIdentityPlatformEnabled = false;
 const mockResolveCanonicalRequestUser = jest.fn(async (user) => user);
 const mockRunWithCanonicalRequestUser = jest.fn((_user, callback) => callback());
 
@@ -43,6 +44,10 @@ jest.mock('~/server/services/StaraApiClient', () => ({
   isCanonicalIdentityContextEnabled: () => mockCanonicalIdentityEnabled,
   resolveCanonicalRequestUser: (...args) => mockResolveCanonicalRequestUser(...args),
   runWithCanonicalRequestUser: (...args) => mockRunWithCanonicalRequestUser(...args),
+}));
+
+jest.mock('~/server/services/IdentityPlatformService', () => ({
+  identityPlatformAuthEnabled: () => mockIdentityPlatformEnabled,
 }));
 
 jest.mock('@librechat/data-schemas', () => {
@@ -296,6 +301,7 @@ describe('requireJwtAuth tenant context chaining', () => {
     mockPassportError = null;
     mockRegisteredStrategies = new Set(['jwt']);
     mockCanonicalIdentityEnabled = false;
+    mockIdentityPlatformEnabled = false;
     mockResolveCanonicalRequestUser.mockReset();
     mockResolveCanonicalRequestUser.mockImplementation(async (user) => user);
     mockRunWithCanonicalRequestUser.mockClear();
@@ -348,6 +354,55 @@ describe('requireJwtAuth tenant context chaining', () => {
       expect.objectContaining({ id: 'user-123', tenantId: 'tenant-canonical' }),
       expect.any(Function),
     );
+  });
+
+  it('uses Identity Platform exclusively and does not fall back to a legacy JWT', async () => {
+    mockIdentityPlatformEnabled = true;
+    mockCanonicalIdentityEnabled = true;
+    mockRegisteredStrategies.add('identityPlatformJwt');
+    const req = mockReq(undefined, {
+      _mockStrategies: {
+        identityPlatformJwt: {
+          user: { id: 'identity-user-1', tenantId: 'tenant-acme', role: 'USER' },
+        },
+        jwt: { user: { id: 'legacy-user', tenantId: 'tenant-acme', role: 'USER' } },
+      },
+    });
+    const res = mockRes();
+    const next = jest.fn();
+
+    await new Promise((resolve) => {
+      requireJwtAuth(req, res, () => {
+        next();
+        resolve();
+      });
+    });
+
+    expect(req.authStrategy).toBe('identityPlatformJwt');
+    expect(passport.authenticate).toHaveBeenCalledTimes(1);
+    expect(passport.authenticate).toHaveBeenCalledWith(
+      'identityPlatformJwt',
+      { session: false },
+      expect.any(Function),
+    );
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an invalid Identity Platform token without trying a legacy JWT', () => {
+    mockIdentityPlatformEnabled = true;
+    mockRegisteredStrategies.add('identityPlatformJwt');
+    const req = mockReq(undefined, {
+      _mockStrategies: {
+        identityPlatformJwt: { user: false, info: { message: 'Unauthorized' }, status: 401 },
+        jwt: { user: { id: 'legacy-user', tenantId: 'tenant-acme', role: 'USER' } },
+      },
+    });
+    const res = mockRes();
+
+    requireJwtAuth(req, res, jest.fn());
+
+    expect(passport.authenticate).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(401);
   });
 
   it('fails closed before tenant middleware when canonical account resolution fails', async () => {
@@ -902,6 +957,7 @@ describe('requireRumProxyAuth', () => {
   afterEach(() => {
     mockPassportError = null;
     mockRegisteredStrategies = new Set(['jwt']);
+    mockIdentityPlatformEnabled = false;
     isEnabled.mockReturnValue(false);
     maybeRefreshCloudFrontAuthCookiesMiddleware.mockClear();
     logger.debug.mockClear();

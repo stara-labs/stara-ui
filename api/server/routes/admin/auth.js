@@ -35,6 +35,7 @@ const { getAppConfig } = require('~/server/services/Config');
 const getLogStores = require('~/cache/getLogStores');
 const { getOpenIdConfig } = require('~/strategies');
 const middleware = require('~/server/middleware');
+const requireLegacyAuthMode = require('~/server/middleware/requireLegacyAuthMode');
 
 const requireAdminAccess = requireCapability(SystemCapabilities.ACCESS_ADMIN);
 
@@ -45,6 +46,8 @@ const setBalanceConfig = createSetBalanceConfig({
 });
 
 const router = express.Router();
+
+router.use(['/login/local', '/oauth'], requireLegacyAuthMode);
 
 function resolveRequestOrigin(req) {
   const originHeader = req.get('origin');

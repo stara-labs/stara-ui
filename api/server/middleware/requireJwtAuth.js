@@ -17,6 +17,7 @@ const {
   resolveCanonicalRequestUser,
   runWithCanonicalRequestUser,
 } = require('~/server/services/StaraApiClient');
+const { identityPlatformAuthEnabled } = require('~/server/services/IdentityPlatformService');
 
 const hasPassportStrategy = (strategy) =>
   typeof passport._strategy === 'function' && passport._strategy(strategy) != null;
@@ -50,13 +51,21 @@ const getAuthStrategies = (req) => {
   const openIdReuseUserId = getValidOpenIdReuseUserId(parsedCookies);
   const useOpenIdJwt =
     tokenProvider === 'openid' && openidJwtAvailable && openIdReuseUserId != null;
+  const useIdentityPlatform = identityPlatformAuthEnabled();
+
+  let strategies = ['jwt'];
+  if (useIdentityPlatform) {
+    strategies = ['identityPlatformJwt'];
+  } else if (useOpenIdJwt) {
+    strategies = ['openidJwt', 'jwt'];
+  }
 
   return {
     tokenProvider,
     openidReuseEnabled,
     openidJwtAvailable,
     openIdReuseUserId,
-    strategies: useOpenIdJwt ? ['openidJwt', 'jwt'] : ['jwt'],
+    strategies,
   };
 };
 

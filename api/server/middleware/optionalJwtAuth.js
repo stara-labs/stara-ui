@@ -1,6 +1,12 @@
 const cookies = require('cookie');
 const passport = require('passport');
 const { isEnabled, tenantContextMiddleware } = require('@librechat/api');
+const {
+  isCanonicalIdentityContextEnabled,
+  resolveCanonicalRequestUser,
+  runWithCanonicalRequestUser,
+} = require('~/server/services/StaraApiClient');
+const { identityPlatformAuthEnabled } = require('~/server/services/IdentityPlatformService');
 
 const hasPassportStrategy = (strategy) =>
   typeof passport._strategy === 'function' && passport._strategy(strategy) != null;
@@ -15,21 +21,37 @@ const optionalJwtAuth = (req, res, next) => {
     tokenProvider === 'openid' &&
     isEnabled(process.env.OPENID_REUSE_TOKENS) &&
     hasPassportStrategy('openidJwt');
+  let strategy = 'jwt';
+  if (identityPlatformAuthEnabled()) {
+    strategy = 'identityPlatformJwt';
+  } else if (useOpenIdJwt) {
+    strategy = 'openidJwt';
+  }
   const callback = (err, user) => {
     if (err) {
       return next(err);
     }
     if (user) {
-      req.user = user;
-      req.authStrategy = useOpenIdJwt ? 'openidJwt' : 'jwt';
-      return tenantContextMiddleware(req, res, next);
+      const continueWithUser = (resolvedUser, canonicalIdentity = false) => {
+        const continueAuthentication = () => {
+          req.user = resolvedUser;
+          req.authStrategy = strategy;
+          return tenantContextMiddleware(req, res, next);
+        };
+        return canonicalIdentity
+          ? runWithCanonicalRequestUser(resolvedUser, continueAuthentication)
+          : continueAuthentication();
+      };
+      if (!isCanonicalIdentityContextEnabled()) {
+        return continueWithUser(user);
+      }
+      return resolveCanonicalRequestUser(user)
+        .then((resolvedUser) => continueWithUser(resolvedUser, true))
+        .catch(next);
     }
     next();
   };
-  if (useOpenIdJwt) {
-    return passport.authenticate('openidJwt', { session: false }, callback)(req, res, next);
-  }
-  passport.authenticate('jwt', { session: false }, callback)(req, res, next);
+  passport.authenticate(strategy, { session: false }, callback)(req, res, next);
 };
 
 module.exports = optionalJwtAuth;

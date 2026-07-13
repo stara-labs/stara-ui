@@ -15,6 +15,7 @@ const { checkDomainAllowed, loginLimiter, logHeaders } = require('~/server/middl
 const { createOAuthHandler } = require('~/server/controllers/auth/oauth');
 const { findBalanceByUser, upsertBalanceFields } = require('~/models');
 const { getAppConfig } = require('~/server/services/Config');
+const requireLegacyAuthMode = require('~/server/middleware/requireLegacyAuthMode');
 
 const setBalanceConfig = createSetBalanceConfig({
   getAppConfig,
@@ -34,6 +35,7 @@ const authFailureRedirectOptions = {
   authFailedError: ErrorTypes.AUTH_FAILED,
 };
 
+router.use(requireLegacyAuthMode);
 router.use(logHeaders);
 router.use(loginLimiter);
 

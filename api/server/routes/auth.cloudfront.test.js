@@ -2,6 +2,7 @@ const express = require('express');
 const request = require('supertest');
 
 const mockForceRefreshCloudFrontAuthCookies = jest.fn();
+let mockIdentityPlatformEnabled = false;
 
 jest.mock('@librechat/api', () => ({
   createSetBalanceConfig: jest.fn(() => (req, res, next) => next()),
@@ -43,6 +44,10 @@ jest.mock('~/models', () => ({
 
 jest.mock('~/server/services/Config', () => ({
   getAppConfig: jest.fn(),
+}));
+
+jest.mock('~/server/services/IdentityPlatformService', () => ({
+  identityPlatformAuthEnabled: () => mockIdentityPlatformEnabled,
 }));
 
 jest.mock('~/server/middleware', () => {
@@ -87,6 +92,7 @@ describe('POST /api/auth/cloudfront/refresh', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockIdentityPlatformEnabled = false;
     app = express();
     app.use(express.json());
     app.use('/api/auth', authRouter);
@@ -153,5 +159,48 @@ describe('POST /api/auth/cloudfront/refresh', () => {
       refreshAfterSec: 1500,
     });
     expect(mockForceRefreshCloudFrontAuthCookies).not.toHaveBeenCalled();
+  });
+});
+
+describe('Identity Platform auth cutover', () => {
+  let app;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockIdentityPlatformEnabled = true;
+    app = express();
+    app.use(express.json());
+    app.use('/api/auth', authRouter);
+  });
+
+  afterEach(() => {
+    mockIdentityPlatformEnabled = false;
+  });
+
+  it.each([
+    '/login',
+    '/refresh',
+    '/register',
+    '/requestPasswordReset',
+    '/resetPassword',
+    '/2fa/enable',
+    '/2fa/verify',
+    '/2fa/verify-temp',
+    '/2fa/confirm',
+    '/2fa/disable',
+    '/2fa/backup/regenerate',
+  ])('retires the legacy operation at %s', async (path) => {
+    const response = await request(app).post(`/api/auth${path}`).send({}).expect(410);
+
+    expect(response.body).toMatchObject({ error: 'identity_platform_auth_required' });
+  });
+
+  it('keeps logout stateless after Identity Platform token authentication', async () => {
+    const response = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', 'Bearer ok')
+      .expect(204);
+
+    expect(response.status).toBe(204);
   });
 });
