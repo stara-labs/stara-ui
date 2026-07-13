@@ -226,3 +226,7 @@ describe('Access Permissions Routes - Security Tests (SBA-ADV-20251203-02)', () 
     });
   });
 });
+jest.mock('~/models/canonicalAgents', () => ({
+  ...jest.requireActual('~/models/canonicalAgents'),
+  canonicalAgentsEnabled: jest.fn(() => false),
+}));

@@ -1611,6 +1611,8 @@
   "com_ui_role_manager_desc": "Can view, modify, and delete the agent",
   "com_ui_role_owner": "Owner",
   "com_ui_role_owner_desc": "Has full control over the agent including sharing it",
+  "com_ui_role_operator": "Operator",
+  "com_ui_role_operator_desc": "Can use the agent but cannot modify it",
   "com_ui_role_select": "Role",
   "com_ui_role_viewer": "Viewer",
   "com_ui_role_viewer_desc": "Can view and use the agent but cannot modify it",

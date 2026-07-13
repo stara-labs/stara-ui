@@ -70,6 +70,7 @@ export enum PermissionBits {
  */
 export enum AccessRoleIds {
   AGENT_VIEWER = 'agent_viewer',
+  AGENT_OPERATOR = 'agent_operator',
   AGENT_EDITOR = 'agent_editor',
   AGENT_OWNER = 'agent_owner',
   PROMPTGROUP_VIEWER = 'promptGroup_viewer',
@@ -104,6 +105,7 @@ export const principalSchema = z.object({
   idOnTheSource: z.string().optional(), // Entra ID for users/groups
   accessRoleId: z.nativeEnum(AccessRoleIds).optional(), // Access role ID for permissions
   memberCount: z.number().optional(), // for group type
+  isCanonicalOwner: z.boolean().optional(),
 });
 
 /**
@@ -210,6 +212,7 @@ export type TPrincipalSearchParams = {
   q: string;
   limit?: number;
   types?: Array<PrincipalType.USER | PrincipalType.GROUP | PrincipalType.ROLE>;
+  resourceType?: ResourceType;
 };
 
 /**
@@ -258,9 +261,10 @@ export type TAvailableRolesResponse = {
  */
 export const getResourcePermissionsResponseSchema = z.object({
   resourceType: z.nativeEnum(ResourceType),
-  resourceId: z.nativeEnum(AccessRoleIds),
+  resourceId: z.string(),
   principals: z.array(principalSchema),
   public: z.boolean(),
+  publicSupported: z.boolean().optional(),
   publicAccessRoleId: z.nativeEnum(AccessRoleIds).optional(),
 });
 
@@ -321,6 +325,7 @@ export function permBitsToAccessLevel(permBits: number): TAccessLevel {
 export function accessRoleToPermBits(accessRoleId: string): number {
   switch (accessRoleId) {
     case AccessRoleIds.AGENT_VIEWER:
+    case AccessRoleIds.AGENT_OPERATOR:
     case AccessRoleIds.PROMPTGROUP_VIEWER:
     case AccessRoleIds.MCPSERVER_VIEWER:
     case AccessRoleIds.REMOTE_AGENT_VIEWER:

@@ -20,12 +20,37 @@ const {
   searchEntraIdPrincipals,
 } = require('~/server/services/GraphApiService');
 const db = require('~/models');
+const {
+  getCanonicalAgentPermissions,
+  getCanonicalAgentRoles,
+  isCanonicalAgentSharing,
+  searchCanonicalPrincipals,
+  updateCanonicalAgentPermissions,
+} = require('~/server/services/CanonicalAgentSharingService');
 
 const matchesCurrentTenant = (principal, tenantId) => {
   if (!tenantId || tenantId === SYSTEM_TENANT_ID) {
     return true;
   }
   return principal?.tenantId === tenantId;
+};
+
+const loadCanonicalSharingUser = async (requestUser) => {
+  const user = await db.getUserById(
+    requestUser?.id,
+    '_id id email username name tenantId idOnTheSource identitySubject emailVerified twoFactorEnabled',
+  );
+  if (!user) {
+    const error = new Error('User principal not found');
+    error.status = 404;
+    throw error;
+  }
+  const profile = user.toObject?.() ?? user;
+  return {
+    ...requestUser,
+    ...profile,
+    id: profile.id ?? profile._id?.toString() ?? requestUser.id,
+  };
 };
 
 /**
@@ -60,6 +85,18 @@ const updateResourcePermissions = async (req, res) => {
   try {
     const { resourceType, resourceId } = req.params;
     validateResourceType(resourceType);
+
+    if (isCanonicalAgentSharing(resourceType)) {
+      return res
+        .status(200)
+        .json(
+          await updateCanonicalAgentPermissions(
+            await loadCanonicalSharingUser(req.user),
+            resourceId,
+            req.body,
+          ),
+        );
+    }
 
     /** @type {TUpdateResourcePermissionsRequest} */
     const { updated, removed, public: isPublic, publicAccessRoleId } = req.body;
@@ -198,6 +235,14 @@ const getResourcePermissions = async (req, res) => {
   try {
     const { resourceType, resourceId } = req.params;
     validateResourceType(resourceType);
+
+    if (isCanonicalAgentSharing(resourceType)) {
+      return res
+        .status(200)
+        .json(
+          await getCanonicalAgentPermissions(await loadCanonicalSharingUser(req.user), resourceId),
+        );
+    }
     const tenantId = getTenantId();
 
     const results = await db.aggregateAclEntries([
@@ -344,6 +389,12 @@ const getResourceRoles = async (req, res) => {
     const { resourceType } = req.params;
     validateResourceType(resourceType);
 
+    if (isCanonicalAgentSharing(resourceType)) {
+      return res
+        .status(200)
+        .json(await getCanonicalAgentRoles(await loadCanonicalSharingUser(req.user)));
+    }
+
     const roles = await getAvailableRoles({ resourceType });
 
     res.status(200).json(
@@ -400,7 +451,7 @@ const getUserEffectivePermissions = async (req, res) => {
  */
 const searchPrincipals = async (req, res) => {
   try {
-    const { q: rawQuery, limit = 20, types } = req.query;
+    const { q: rawQuery, limit = 20, types, resourceType } = req.query;
 
     if (typeof rawQuery !== 'string' || rawQuery.trim().length === 0) {
       return res.status(400).json({
@@ -425,6 +476,16 @@ const searchPrincipals = async (req, res) => {
         [PrincipalType.USER, PrincipalType.GROUP, PrincipalType.ROLE].includes(t),
       );
       typeFilters = validTypes.length > 0 ? validTypes : null;
+    }
+
+    if (isCanonicalAgentSharing(resourceType)) {
+      return res.status(200).json(
+        await searchCanonicalPrincipals(await loadCanonicalSharingUser(req.user), {
+          query,
+          limit: searchLimit,
+          typeFilters,
+        }),
+      );
     }
 
     const localResults = await db.searchPrincipals(query, searchLimit, typeFilters);

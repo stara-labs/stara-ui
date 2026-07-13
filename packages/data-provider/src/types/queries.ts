@@ -163,6 +163,7 @@ export type PrincipalSearchParams = {
   q: string;
   limit?: number;
   types?: Array<p.PrincipalType.USER | p.PrincipalType.GROUP | p.PrincipalType.ROLE>;
+  resourceType?: p.ResourceType;
 };
 
 export type PrincipalSearchResponse = {

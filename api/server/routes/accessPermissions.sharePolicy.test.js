@@ -318,3 +318,7 @@ describe('Access permissions share policy', () => {
     expect(updateResourcePermissions).toHaveBeenCalledTimes(1);
   });
 });
+jest.mock('~/models/canonicalAgents', () => ({
+  ...jest.requireActual('~/models/canonicalAgents'),
+  canonicalAgentsEnabled: jest.fn(() => false),
+}));
