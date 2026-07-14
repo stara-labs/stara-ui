@@ -11,6 +11,7 @@ const adminUsers = require('./admin/users');
 const adminAuditLog = require('./admin/audit');
 const endpoints = require('./endpoints');
 const staticRoute = require('./static');
+const staraEngineering = require('./staraEngineering');
 const staraOrganizations = require('./staraOrganizations');
 const messages = require('./messages');
 const memories = require('./memories');
@@ -76,6 +77,7 @@ module.exports = {
   assistants,
   categories,
   staticRoute,
+  staraEngineering,
   staraOrganizations,
   accessPermissions,
 };

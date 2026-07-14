@@ -63,6 +63,40 @@ export const useStaraOrganizationsContextQuery = (
   );
 };
 
+export const useStaraEngineeringContextQuery = (
+  config?: UseQueryOptions<t.TStaraEngineeringContext>,
+): QueryObserverResult<t.TStaraEngineeringContext> => {
+  return useQuery<t.TStaraEngineeringContext>(
+    [QueryKeys.staraEngineering],
+    () => dataService.getStaraEngineeringContext(),
+    {
+      staleTime: 1000 * 10,
+      refetchInterval: 1000 * 10,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      ...config,
+    },
+  );
+};
+
+export const useStaraEngineeringRunQuery = (
+  runId: string | null | undefined,
+  config?: UseQueryOptions<t.TStaraEngineeringRunAggregate>,
+): QueryObserverResult<t.TStaraEngineeringRunAggregate> => {
+  return useQuery<t.TStaraEngineeringRunAggregate>(
+    [QueryKeys.staraEngineeringRun, runId],
+    () => dataService.getStaraEngineeringRun(runId as string),
+    {
+      enabled: Boolean(runId),
+      staleTime: 1000 * 5,
+      refetchInterval: 1000 * 5,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      ...config,
+    },
+  );
+};
+
 export const useGetPresetsQuery = (
   config?: UseQueryOptions<TPreset[]>,
 ): QueryObserverResult<TPreset[], unknown> => {

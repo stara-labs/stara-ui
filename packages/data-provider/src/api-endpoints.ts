@@ -467,6 +467,19 @@ export const staraOrganizationTeams = (tenantId: string) =>
 export const staraOrganizationTeam = (tenantId: string, teamId: string) =>
   `${staraOrganizationTeams(tenantId)}/${encodeURIComponent(teamId)}`;
 
+/* Stara engineering delivery */
+export const staraEngineering = () => `${BASE_URL}/api/stara/engineering`;
+export const staraEngineeringContext = () => `${staraEngineering()}/context`;
+export const staraEngineeringRepositories = () => `${staraEngineering()}/repositories`;
+export const staraEngineeringPolicy = () => `${staraEngineering()}/policy`;
+export const staraEngineeringTasks = () => `${staraEngineering()}/tasks`;
+export const staraEngineeringTaskRuns = (taskId: string) =>
+  `${staraEngineeringTasks()}/${encodeURIComponent(taskId)}/runs`;
+export const staraEngineeringRun = (runId: string) =>
+  `${staraEngineering()}/runs/${encodeURIComponent(runId)}`;
+export const staraEngineeringRunAction = (runId: string, action: string) =>
+  `${staraEngineeringRun(runId)}/${action}`;
+
 /* Tool favorites (starred marketplace items) */
 export const toolFavorites = () => `${BASE_URL}/api/user/settings/favorites/tools`;
 export const toolFavorite = (itemType: string, itemId: string) =>

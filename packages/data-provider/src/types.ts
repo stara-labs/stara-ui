@@ -393,6 +393,280 @@ export type TUpsertStaraOrgTeamRequest = {
   memberIds?: string[];
 };
 
+export type StaraEngineeringRiskClass = 'low' | 'medium' | 'high' | 'critical';
+export type StaraEngineeringTargetEnvironment = 'none' | 'development' | 'staging' | 'production';
+export type StaraEngineeringRunStatus =
+  | 'queued'
+  | 'planning'
+  | 'executing'
+  | 'checking'
+  | 'pull_request_open'
+  | 'waiting_for_ci'
+  | 'waiting_for_review'
+  | 'waiting_for_approval'
+  | 'repairing'
+  | 'merge_ready'
+  | 'merging'
+  | 'deploying'
+  | 'verifying'
+  | 'completed'
+  | 'blocked'
+  | 'cancelled'
+  | 'failed'
+  | 'rolled_back';
+
+export type TStaraEngineeringCheckProfile = {
+  profile_id: string;
+  label: string;
+  runner: 'npm';
+  script: string;
+  working_directory: string;
+};
+
+export type TStaraEngineeringDeploymentTarget = {
+  provider: 'cloud_run';
+  project_id: string;
+  region: string;
+  service_name: string;
+};
+
+export type TStaraEngineeringRepository = {
+  id: string;
+  tenant_id: string;
+  provider: 'github';
+  provider_repository_id: string | null;
+  repository_owner: string;
+  repository_name: string;
+  default_branch: string;
+  installation_id: string | null;
+  status: 'pending' | 'active' | 'disabled' | 'archived';
+  check_profiles: TStaraEngineeringCheckProfile[];
+  deployment_target: TStaraEngineeringDeploymentTarget | null;
+  risk_paths: string[];
+  created_by_user_id: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TStaraEngineeringTask = {
+  id: string;
+  tenant_id: string;
+  created_by_user_id: string;
+  idempotency_key: string | null;
+  title: string;
+  goal: string;
+  acceptance_criteria: string[];
+  risk_class: StaraEngineeringRiskClass;
+  target_environment: StaraEngineeringTargetEnvironment;
+  status:
+    | 'draft'
+    | 'ready'
+    | 'running'
+    | 'blocked'
+    | 'completed'
+    | 'cancelled'
+    | 'failed'
+    | 'rolled_back';
+  metadata_redacted: Record<string, unknown>;
+  version: number;
+  created_action_version_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TStaraEngineeringTaskRepository = {
+  repository_connection_id: string;
+  dependency_order: number;
+  base_revision: string | null;
+  target_branch: string | null;
+  repository: TStaraEngineeringRepository;
+};
+
+export type TStaraEngineeringRun = {
+  id: string;
+  tenant_id: string;
+  task_id: string;
+  attempt: number;
+  retry_of_run_id: string | null;
+  status: StaraEngineeringRunStatus;
+  current_stage: string | null;
+  trace_id: string;
+  idempotency_key: string;
+  started_by_user_id: string;
+  block_reason_redacted: string | null;
+  metadata_redacted: Record<string, unknown>;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+export type TStaraEngineeringEvidenceReference = {
+  evidence_type:
+    | 'source_commit'
+    | 'change_set'
+    | 'check_run'
+    | 'pull_request'
+    | 'review'
+    | 'deployment'
+    | 'release_verification';
+  provider: string;
+  external_id: string;
+  revision?: string;
+  url?: string;
+  conclusion?: 'pending' | 'success' | 'failure' | 'cancelled' | 'neutral';
+};
+
+export type TStaraEngineeringRunEvent = {
+  id: string;
+  tenant_id: string;
+  run_id: string;
+  run_version: number;
+  event_type: string;
+  from_status: StaraEngineeringRunStatus | null;
+  to_status: StaraEngineeringRunStatus;
+  stage: string | null;
+  summary_redacted: string;
+  evidence_refs: TStaraEngineeringEvidenceReference[];
+  metadata_redacted: Record<string, unknown>;
+  idempotency_key: string;
+  action_version_id: string;
+  created_at: string;
+};
+
+export type TStaraEngineeringTaskAggregate = {
+  task: TStaraEngineeringTask;
+  repositories: TStaraEngineeringTaskRepository[];
+  latest_run: TStaraEngineeringRun | null;
+};
+
+export type TStaraEngineeringRunAggregate = {
+  run: TStaraEngineeringRun;
+  task: TStaraEngineeringTask;
+  repositories: TStaraEngineeringTaskRepository[];
+  events: TStaraEngineeringRunEvent[];
+};
+
+export type TStaraEngineeringApproval = {
+  review_item_id: string;
+  tenant_id: string;
+  run_id: string;
+  run_version: number;
+  target: 'merge' | 'deployment';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  required_role_keys: Array<'owner' | 'admin'>;
+  summary_redacted: Record<string, unknown>;
+  decision: 'approved' | 'rejected' | null;
+  decided_by_user_id: string | null;
+  decision_reason_redacted: string | null;
+  created_at: string;
+  updated_at: string;
+  decided_at: string | null;
+};
+
+export type TStaraEngineeringDeliveryPolicy = {
+  review_required: boolean;
+  merge_approval_required: boolean;
+  deployment_approval_required: boolean;
+  required_ci_check_names: string[];
+  max_repair_attempts: number;
+  max_immediate_steps: number;
+  branch_prefix: string;
+  pull_request_draft: boolean;
+  coding_model: string;
+  coding_grant_ttl_seconds: number;
+  coding_max_requests: number;
+  coding_max_request_bytes: number;
+  coding_max_input_tokens: number;
+  coding_max_output_tokens: number;
+  coding_max_output_tokens_per_request: number;
+};
+
+export type TStaraEngineeringPolicyConfig = {
+  tenant_id: string;
+  template_key: 'regulated_default' | 'regulated_strict' | 'custom';
+  regulated_data_classes: Array<'pii' | 'phi' | 'financial' | 'confidential'>;
+  secure_inference_required: boolean;
+  frontier_projection_mode: 'deidentified_only' | 'review_required' | 'blocked';
+  missing_context_behavior: 'fail_closed';
+  review_required_for_unknown_sensitivity: boolean;
+  redacted_observations_required: boolean;
+  engineering_delivery: TStaraEngineeringDeliveryPolicy;
+  updated_by_user_id: string;
+  updated_at: string;
+};
+
+export type TStaraEngineeringReadiness = {
+  tenant_id: string;
+  ready_for_regulated_ga: boolean;
+  generated_at: string;
+  checks: Array<{ check_id: string; status: 'pass' | 'fail'; summary: string }>;
+};
+
+export type TStaraEngineeringContext = {
+  active_tenant_id: string | null;
+  active_org_name: string | null;
+  actor_role_key: StaraOrgRoleKey | null;
+  permissions: {
+    can_connect_repository: boolean;
+    can_create_task: boolean;
+    can_decide_approval: boolean;
+    can_update_policy: boolean;
+  };
+  repositories: TStaraEngineeringRepository[];
+  tasks: TStaraEngineeringTaskAggregate[];
+  approvals: TStaraEngineeringApproval[];
+  policy_config: TStaraEngineeringPolicyConfig | null;
+  readiness: TStaraEngineeringReadiness | null;
+};
+
+export type TCreateStaraEngineeringRepositoryRequest = {
+  repository_owner: string;
+  repository_name: string;
+  default_branch?: string;
+  installation_id?: string;
+  check_profiles?: TStaraEngineeringCheckProfile[];
+  deployment_target?: TStaraEngineeringDeploymentTarget;
+  risk_paths?: string[];
+  activate?: boolean;
+};
+
+export type TCreateStaraEngineeringTaskRequest = {
+  idempotency_key: string;
+  title: string;
+  goal: string;
+  acceptance_criteria: string[];
+  risk_class: StaraEngineeringRiskClass;
+  target_environment: StaraEngineeringTargetEnvironment;
+  repositories: Array<{
+    repository_connection_id: string;
+    dependency_order: number;
+    base_revision?: string;
+    target_branch?: string;
+  }>;
+  metadata_redacted?: Record<string, unknown>;
+};
+
+export type TStartStaraEngineeringRunRequest = {
+  idempotency_key: string;
+  trace_id?: string;
+  metadata_redacted?: Record<string, unknown>;
+};
+
+export type TDecideStaraEngineeringRunRequest = {
+  target: 'merge' | 'deployment';
+  decision: 'approved' | 'rejected';
+  expected_version: number;
+  idempotency_key: string;
+  reason_redacted: string;
+};
+
+export type TUpdateStaraEngineeringPolicyRequest = {
+  template_key?: 'regulated_default' | 'regulated_strict' | 'custom';
+  engineering_delivery?: Partial<TStaraEngineeringDeliveryPolicy>;
+};
+
 export type TStaraAccessGroup = {
   id: string;
   name: string;
