@@ -177,6 +177,96 @@ export function deleteStaraOrganizationTeam({
   return request.delete(endpoints.staraOrganizationTeam(tenantId, teamId));
 }
 
+export function getStaraEngineeringContext(): Promise<t.TStaraEngineeringContext> {
+  return request.get(endpoints.staraEngineeringContext());
+}
+
+export function createStaraEngineeringRepository(
+  payload: t.TCreateStaraEngineeringRepositoryRequest,
+): Promise<{ repository: t.TStaraEngineeringRepository; action_version_id: string }> {
+  return request.post(endpoints.staraEngineeringRepositories(), payload);
+}
+
+export function updateStaraEngineeringPolicy(
+  payload: t.TUpdateStaraEngineeringPolicyRequest,
+): Promise<t.TStaraEngineeringPolicyConfig> {
+  return request.put(endpoints.staraEngineeringPolicy(), payload);
+}
+
+export function createStaraEngineeringTask(
+  payload: t.TCreateStaraEngineeringTaskRequest,
+): Promise<t.TStaraEngineeringTaskAggregate> {
+  return request.post(endpoints.staraEngineeringTasks(), payload);
+}
+
+export function startStaraEngineeringRun({
+  taskId,
+  payload,
+}: {
+  taskId: string;
+  payload: t.TStartStaraEngineeringRunRequest;
+}): Promise<t.TStaraEngineeringRunAggregate> {
+  return request.post(endpoints.staraEngineeringTaskRuns(taskId), payload);
+}
+
+export function getStaraEngineeringRun(runId: string): Promise<t.TStaraEngineeringRunAggregate> {
+  return request.get(endpoints.staraEngineeringRun(runId));
+}
+
+export function decideStaraEngineeringRun({
+  runId,
+  payload,
+}: {
+  runId: string;
+  payload: t.TDecideStaraEngineeringRunRequest;
+}): Promise<{
+  aggregate: t.TStaraEngineeringRunAggregate;
+  review: t.TStaraEngineeringApproval;
+  deduplicated: boolean;
+}> {
+  return request.post(endpoints.staraEngineeringRunAction(runId, 'decisions'), payload);
+}
+
+export function cancelStaraEngineeringRun({
+  runId,
+  expectedVersion,
+}: {
+  runId: string;
+  expectedVersion: number;
+}): Promise<t.TStaraEngineeringRunAggregate> {
+  return request.post(endpoints.staraEngineeringRunAction(runId, 'cancel'), {
+    expected_version: expectedVersion,
+  });
+}
+
+export function retryStaraEngineeringRun({
+  runId,
+  payload,
+}: {
+  runId: string;
+  payload: t.TStartStaraEngineeringRunRequest;
+}): Promise<t.TStaraEngineeringRunAggregate> {
+  return request.post(endpoints.staraEngineeringRunAction(runId, 'retry'), payload);
+}
+
+export function resumeStaraEngineeringRun({
+  runId,
+  expectedVersion,
+  idempotencyKey,
+  reasonRedacted,
+}: {
+  runId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reasonRedacted: string;
+}): Promise<t.TStaraEngineeringRunAggregate> {
+  return request.post(endpoints.staraEngineeringRunAction(runId, 'resume'), {
+    expected_version: expectedVersion,
+    idempotency_key: idempotencyKey,
+    reason_redacted: reasonRedacted,
+  });
+}
+
 export function getSharedMessages(shareId: string): Promise<t.TSharedMessagesResponse> {
   return request.get(endpoints.shareMessages(shareId));
 }

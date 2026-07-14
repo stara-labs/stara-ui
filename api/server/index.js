@@ -324,6 +324,7 @@ const startServer = async () => {
   app.use('/api/banner', routes.banner);
   app.use('/api/memories', routes.memories);
   app.use('/api/permissions', routes.accessPermissions);
+  app.use('/api/stara/engineering', routes.staraEngineering);
   app.use('/api/stara/organizations', routes.staraOrganizations);
 
   app.use('/api/tags', routes.tags);

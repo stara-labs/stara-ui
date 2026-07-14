@@ -314,6 +314,218 @@ export const useDeleteStaraOrganizationTeamMutation = (
   );
 };
 
+const invalidateStaraEngineering = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  runId?: string,
+) => {
+  queryClient.invalidateQueries([QueryKeys.staraEngineering]);
+  if (runId) {
+    queryClient.invalidateQueries([QueryKeys.staraEngineeringRun, runId]);
+  }
+};
+
+export const useCreateStaraEngineeringRepositoryMutation = (
+  options?: t.MutationOptions<
+    { repository: t.TStaraEngineeringRepository; action_version_id: string },
+    t.TCreateStaraEngineeringRepositoryRequest
+  >,
+): UseMutationResult<
+  { repository: t.TStaraEngineeringRepository; action_version_id: string },
+  unknown,
+  t.TCreateStaraEngineeringRepositoryRequest,
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.createStaraEngineeringRepository],
+    (payload) => dataService.createStaraEngineeringRepository(payload),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        invalidateStaraEngineering(queryClient);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useUpdateStaraEngineeringPolicyMutation = (
+  options?: t.MutationOptions<
+    t.TStaraEngineeringPolicyConfig,
+    t.TUpdateStaraEngineeringPolicyRequest
+  >,
+): UseMutationResult<
+  t.TStaraEngineeringPolicyConfig,
+  unknown,
+  t.TUpdateStaraEngineeringPolicyRequest,
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.updateStaraEngineeringPolicy],
+    (payload) => dataService.updateStaraEngineeringPolicy(payload),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        invalidateStaraEngineering(queryClient);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useCreateStaraEngineeringTaskMutation = (
+  options?: t.MutationOptions<
+    t.TStaraEngineeringTaskAggregate,
+    t.TCreateStaraEngineeringTaskRequest
+  >,
+): UseMutationResult<
+  t.TStaraEngineeringTaskAggregate,
+  unknown,
+  t.TCreateStaraEngineeringTaskRequest,
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.createStaraEngineeringTask],
+    (payload) => dataService.createStaraEngineeringTask(payload),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        invalidateStaraEngineering(queryClient);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useStartStaraEngineeringRunMutation = (
+  options?: t.MutationOptions<
+    t.TStaraEngineeringRunAggregate,
+    { taskId: string; payload: t.TStartStaraEngineeringRunRequest }
+  >,
+): UseMutationResult<
+  t.TStaraEngineeringRunAggregate,
+  unknown,
+  { taskId: string; payload: t.TStartStaraEngineeringRunRequest },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.startStaraEngineeringRun],
+    (variables) => dataService.startStaraEngineeringRun(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        queryClient.setQueryData([QueryKeys.staraEngineeringRun, data.run.id], data);
+        invalidateStaraEngineering(queryClient, data.run.id);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useDecideStaraEngineeringRunMutation = (
+  options?: t.MutationOptions<
+    {
+      aggregate: t.TStaraEngineeringRunAggregate;
+      review: t.TStaraEngineeringApproval;
+      deduplicated: boolean;
+    },
+    { runId: string; payload: t.TDecideStaraEngineeringRunRequest }
+  >,
+) => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.decideStaraEngineeringRun],
+    (variables) => dataService.decideStaraEngineeringRun(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        queryClient.setQueryData([QueryKeys.staraEngineeringRun, variables.runId], data.aggregate);
+        invalidateStaraEngineering(queryClient, variables.runId);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useCancelStaraEngineeringRunMutation = (
+  options?: t.MutationOptions<
+    t.TStaraEngineeringRunAggregate,
+    { runId: string; expectedVersion: number }
+  >,
+) => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.cancelStaraEngineeringRun],
+    (variables) => dataService.cancelStaraEngineeringRun(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        queryClient.setQueryData([QueryKeys.staraEngineeringRun, variables.runId], data);
+        invalidateStaraEngineering(queryClient, variables.runId);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useRetryStaraEngineeringRunMutation = (
+  options?: t.MutationOptions<
+    t.TStaraEngineeringRunAggregate,
+    { runId: string; payload: t.TStartStaraEngineeringRunRequest }
+  >,
+) => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.retryStaraEngineeringRun],
+    (variables) => dataService.retryStaraEngineeringRun(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        queryClient.setQueryData([QueryKeys.staraEngineeringRun, data.run.id], data);
+        invalidateStaraEngineering(queryClient, variables.runId);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
+export const useResumeStaraEngineeringRunMutation = (
+  options?: t.MutationOptions<
+    t.TStaraEngineeringRunAggregate,
+    {
+      runId: string;
+      expectedVersion: number;
+      idempotencyKey: string;
+      reasonRedacted: string;
+    }
+  >,
+) => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.resumeStaraEngineeringRun],
+    (variables) => dataService.resumeStaraEngineeringRun(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        queryClient.setQueryData([QueryKeys.staraEngineeringRun, variables.runId], data);
+        invalidateStaraEngineering(queryClient, variables.runId);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
 export const useUpdateConversationMutation = (
   id: string,
 ): UseMutationResult<

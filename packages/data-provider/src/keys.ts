@@ -86,6 +86,8 @@ export enum QueryKeys {
   /* Stara onboarding context */
   staraOnboarding = 'staraOnboarding',
   staraOrganizations = 'staraOrganizations',
+  staraEngineering = 'staraEngineering',
+  staraEngineeringRun = 'staraEngineeringRun',
   /* General user favorites */
   favorites = 'favorites',
 }
@@ -127,6 +129,14 @@ export enum MutationKeys {
   createStaraOrganizationTeam = 'createStaraOrganizationTeam',
   updateStaraOrganizationTeam = 'updateStaraOrganizationTeam',
   deleteStaraOrganizationTeam = 'deleteStaraOrganizationTeam',
+  createStaraEngineeringRepository = 'createStaraEngineeringRepository',
+  updateStaraEngineeringPolicy = 'updateStaraEngineeringPolicy',
+  createStaraEngineeringTask = 'createStaraEngineeringTask',
+  startStaraEngineeringRun = 'startStaraEngineeringRun',
+  decideStaraEngineeringRun = 'decideStaraEngineeringRun',
+  cancelStaraEngineeringRun = 'cancelStaraEngineeringRun',
+  retryStaraEngineeringRun = 'retryStaraEngineeringRun',
+  resumeStaraEngineeringRun = 'resumeStaraEngineeringRun',
   deleteUser = 'deleteUser',
   updateRole = 'updateRole',
   enableTwoFactor = 'enableTwoFactor',
