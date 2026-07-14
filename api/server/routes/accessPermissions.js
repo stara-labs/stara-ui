@@ -21,7 +21,11 @@ const {
 const { requireJwtAuth, checkBan, uaParser, canAccessResource } = require('~/server/middleware');
 const { checkPeoplePickerAccess } = require('~/server/middleware/checkPeoplePickerAccess');
 const { findMCPServerByObjectId, getSkillById } = require('~/models');
-const { isCanonicalResourceSharing } = require('~/server/services/CanonicalResourceSharingService');
+const { getCanonicalRequestUser } = require('~/server/services/StaraApiClient');
+const {
+  hasCanonicalResourcePermission,
+  isCanonicalResourceSharing,
+} = require('~/server/services/CanonicalResourceSharingService');
 
 const router = express.Router();
 
@@ -30,6 +34,13 @@ const skipLegacySharePolicyForCanonicalResource = (middleware) => (req, res, nex
     return next();
   }
   return middleware(req, res, next);
+};
+
+const canonicalAwarePeoplePickerAccess = (req, res, next) => {
+  if (isCanonicalResourceSharing(req.query.resourceType)) {
+    return next();
+  }
+  return checkPeoplePickerAccess(req, res, next);
 };
 
 // Apply common middleware
@@ -46,7 +57,7 @@ router.use(uaParser);
  * GET /api/permissions/search-principals
  * Search for users and groups to grant permissions
  */
-router.get('/search-principals', checkPeoplePickerAccess, searchPrincipals);
+router.get('/search-principals', canonicalAwarePeoplePickerAccess, searchPrincipals);
 
 /**
  * GET /api/permissions/{resourceType}/roles
@@ -60,9 +71,43 @@ router.get('/:resourceType/roles', getResourceRoles);
  * @param {string} requiredPermission - The permission bit required (e.g., SHARE)
  * @returns Express middleware function
  */
-const checkResourcePermissionAccess = (requiredPermission) => (req, res, next) => {
+const checkResourcePermissionAccess = (requiredPermission) => async (req, res, next) => {
   const { resourceType } = req.params;
   let middleware;
+
+  if (isCanonicalResourceSharing(resourceType)) {
+    try {
+      const user = await getCanonicalRequestUser(req.user?.id);
+      if (
+        !(await hasCanonicalResourcePermission(
+          user,
+          resourceType,
+          req.params.resourceId,
+          requiredPermission,
+        ))
+      ) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: `Insufficient permissions to access this ${resourceType}`,
+        });
+      }
+      return next();
+    } catch (error) {
+      const status = [400, 401, 403, 404].includes(error.status) ? error.status : 500;
+      const errorName =
+        {
+          400: 'Bad Request',
+          401: 'Unauthorized',
+          403: 'Forbidden',
+          404: 'Not Found',
+        }[status] ?? 'Internal Server Error';
+      return res.status(status).json({
+        error: errorName,
+        message:
+          status === 500 ? `Failed to check ${resourceType} access permissions` : error.message,
+      });
+    }
+  }
 
   if (resourceType === ResourceType.AGENT) {
     middleware = canAccessResource({

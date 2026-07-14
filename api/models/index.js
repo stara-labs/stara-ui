@@ -7,6 +7,7 @@ const { createCanonicalFileMethods } = require('./canonicalFiles');
 const { createCanonicalPromptMethods } = require('./canonicalPrompts');
 const { createCanonicalSkillMethods } = require('./canonicalSkills');
 const { createCanonicalWorkspaceMethods } = require('./canonicalWorkspace');
+const { createNativeRoleMethods } = require('./nativeRoles');
 
 const methods = createMethods(mongoose, {
   matchModelName,
@@ -18,6 +19,7 @@ const canonicalAgentMethods = createCanonicalAgentMethods(methods);
 const canonicalFileMethods = createCanonicalFileMethods(methods);
 const canonicalPromptMethods = createCanonicalPromptMethods(methods);
 const canonicalSkillMethods = createCanonicalSkillMethods({ ...methods, ...canonicalAgentMethods });
+const nativeRoleMethods = createNativeRoleMethods(methods);
 
 const seedDatabase = async () => {
   await methods.initializeRoles();
@@ -33,5 +35,6 @@ module.exports = {
   ...canonicalFileMethods,
   ...canonicalPromptMethods,
   ...canonicalSkillMethods,
+  ...nativeRoleMethods,
   seedDatabase,
 };

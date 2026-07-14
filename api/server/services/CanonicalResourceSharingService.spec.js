@@ -23,10 +23,16 @@ jest.mock('~/server/services/StaraServiceClient', () => ({
   },
 }));
 
-const { AccessRoleIds, PrincipalType, ResourceType } = require('librechat-data-provider');
+const {
+  AccessRoleIds,
+  PermissionBits,
+  PrincipalType,
+  ResourceType,
+} = require('librechat-data-provider');
 const {
   getCanonicalResourcePermissions,
   getCanonicalResourceRoles,
+  hasCanonicalResourcePermission,
   updateCanonicalResourcePermissions,
 } = require('./CanonicalResourceSharingService');
 
@@ -110,6 +116,24 @@ describe('CanonicalResourceSharingService skills', () => {
         accessRoleId: AccessRoleIds.SKILL_EDITOR,
       }),
     ]);
+  });
+
+  it('checks sharing access through the canonical resource access endpoint', async () => {
+    mockCallStaraApi.mockResolvedValue({
+      access: { permissions: ['skill.read', 'skill.invoke', 'skill.share'] },
+    });
+
+    await expect(
+      hasCanonicalResourcePermission(user, ResourceType.SKILL, skillId, PermissionBits.SHARE),
+    ).resolves.toBe(true);
+    expect(mockCallStaraApi).toHaveBeenCalledWith(user, `/v1/skills/${skillId}/access`, {
+      tenantId: 'tenant_acme',
+    });
+
+    mockCallStaraApi.mockResolvedValue({ access: { permissions: ['skill.read'] } });
+    await expect(
+      hasCanonicalResourcePermission(user, ResourceType.SKILL, skillId, PermissionBits.SHARE),
+    ).resolves.toBe(false);
   });
 
   it('reconciles skill grants through the canonical API and rejects public sharing', async () => {
