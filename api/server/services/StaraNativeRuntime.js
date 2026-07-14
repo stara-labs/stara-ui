@@ -1,4 +1,4 @@
-const { validateStaraApiAudience } = require('./StaraCloudRunAuth');
+const { validateStaraApiAudience, validateStaraServiceAudience } = require('./StaraCloudRunAuth');
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
@@ -107,6 +107,39 @@ function validateStaraNativeRuntime(env = process.env) {
   if (apiAudience && apiUrl) {
     try {
       validateStaraApiAudience(apiUrl, apiAudience);
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+
+  for (const { urlVariable, audienceVariable, serviceLabel } of [
+    {
+      urlVariable: 'STARA_GATEWAY_URL',
+      audienceVariable: 'STARA_GATEWAY_AUDIENCE',
+      serviceLabel: 'Stara Gateway',
+    },
+    {
+      urlVariable: 'STARA_MCP_URL',
+      audienceVariable: 'STARA_MCP_AUDIENCE',
+      serviceLabel: 'Stara MCP',
+    },
+  ]) {
+    const audience = String(env[audienceVariable] ?? '').trim();
+    if (!audience) {
+      continue;
+    }
+    const serviceUrl = String(env[urlVariable] ?? '').trim();
+    if (!serviceUrl) {
+      errors.push(`${urlVariable} is required when ${audienceVariable} is configured.`);
+      continue;
+    }
+    try {
+      validateStaraServiceAudience({
+        serviceUrl,
+        rawAudience: audience,
+        environmentVariable: audienceVariable,
+        serviceLabel,
+      });
     } catch (error) {
       errors.push(error.message);
     }

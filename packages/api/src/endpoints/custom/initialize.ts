@@ -15,12 +15,14 @@ import type {
   AnthropicModelOptions,
 } from '~/types';
 import { getLLMConfig as getAnthropicLLMConfig } from '~/endpoints/anthropic/llm';
+import { getStaraCloudRunIdentityHeaders } from '~/utils/staraCloudRunAuth';
 import { extractDefaultParams } from '~/endpoints/openai/llm';
 import { isUserProvided, checkUserKeyExpiry } from '~/utils';
 import { getOpenAIConfig } from '~/endpoints/openai/config';
 import { getScopedTokenConfigKey } from '~/endpoints/keys';
 import { getCustomEndpointConfig } from '~/app/config';
 import { fetchModels } from '~/endpoints/models';
+import { mergeHeaders } from '~/utils/headers';
 import { validateEndpointURL } from '~/auth';
 import { tokenConfigCache } from '~/cache';
 
@@ -248,6 +250,21 @@ export async function initializeCustom({
     await validateEndpointURL(baseURL, endpoint, appConfig?.endpoints?.allowedAddresses);
   }
 
+  const cloudRunHeaders = userProvidesURL
+    ? undefined
+    : await getStaraCloudRunIdentityHeaders({
+        service: 'gateway',
+        targetName: endpoint,
+        targetUrl: baseURL,
+      });
+  const runtimeEndpointConfig = {
+    ...endpointConfig,
+    headers:
+      cloudRunHeaders && Object.keys(cloudRunHeaders).length > 0
+        ? mergeHeaders(endpointConfig.headers, cloudRunHeaders)
+        : endpointConfig.headers,
+  };
+
   let endpointTokenConfig: EndpointTokenConfig | undefined;
 
   const userId = req.user?.id ?? '';
@@ -291,7 +308,7 @@ export async function initializeCustom({
       // header overrides when the base URL is user-supplied — configured
       // templates like {{LIBRECHAT_OPENID_ID_TOKEN}} would otherwise resolve
       // and leak the user's identity token to a destination the user controls.
-      headers: userProvidesURL ? undefined : endpointConfig.headers,
+      headers: userProvidesURL ? undefined : runtimeEndpointConfig.headers,
       // Note: when both `headers` and `userObject` are supplied below, the
       // MODEL_QUERIES cache inside `fetchModels` is automatically skipped,
       // which prevents a per-user filtered model list from leaking across
@@ -302,7 +319,7 @@ export async function initializeCustom({
   }
 
   const customOptions = buildCustomOptions(
-    endpointConfig,
+    runtimeEndpointConfig,
     appConfig,
     endpointTokenConfig,
     !userProvidesURL,
@@ -327,7 +344,7 @@ export async function initializeCustom({
       apiKey,
       baseURL,
       modelOptions: modelOptions as AnthropicModelOptions,
-      endpointConfig,
+      endpointConfig: runtimeEndpointConfig,
       userProvidesURL,
       allowedAddresses: appConfig?.endpoints?.allowedAddresses,
     });

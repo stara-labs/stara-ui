@@ -15,8 +15,18 @@ jest.mock('~/utils', () => {
   };
 });
 
+const mockGetStaraCloudRunIdentityHeaders = jest.fn().mockResolvedValue({});
+jest.mock('~/utils/staraCloudRunAuth', () => ({
+  getStaraCloudRunIdentityHeaders: (...args: unknown[]) =>
+    mockGetStaraCloudRunIdentityHeaders(...args),
+}));
+
 import { SCOPED_TOKEN_CONFIG_KEY_PREFIX } from '../keys';
 import { createLoadConfigModels } from './models';
+
+beforeEach(() => {
+  mockGetStaraCloudRunIdentityHeaders.mockReset().mockResolvedValue({});
+});
 
 describe('createLoadConfigModels – user-provided baseURL header guard', () => {
   const fetchModels = jest.fn().mockResolvedValue([]);
@@ -177,6 +187,48 @@ describe('createLoadConfigModels – user-provided baseURL header guard', () => 
         baseURL: 'https://admin-trusted.example.com/v1',
         baseURLIsUserProvided: false,
         headers,
+      }),
+    );
+  });
+
+  it('adds Cloud Run identity to the Stara Gateway model-list request', async () => {
+    mockGetStaraCloudRunIdentityHeaders.mockResolvedValue({
+      'x-serverless-authorization': 'Bearer header.payload.signature',
+    });
+    const loadConfigModels = createLoadConfigModels({
+      getAppConfig: jest.fn().mockResolvedValue({
+        endpoints: {
+          [EModelEndpoint.custom]: [
+            {
+              name: 'Stara Gateway',
+              baseURL: 'https://gateway.example.run.app/v1',
+              apiKey: 'stara-key',
+              headers: { 'X-Stara-Test': 'configured' },
+              models: { fetch: true },
+            },
+          ],
+        },
+      }),
+      getUserKeyValues: jest.fn(),
+      fetchModels,
+    });
+
+    await loadConfigModels({
+      user: { id: 'user-1', tenantId: 'tenant-a' },
+      config: undefined,
+    } as unknown as ServerRequest);
+
+    expect(mockGetStaraCloudRunIdentityHeaders).toHaveBeenCalledWith({
+      service: 'gateway',
+      targetName: 'Stara Gateway',
+      targetUrl: 'https://gateway.example.run.app/v1',
+    });
+    expect(fetchModels).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: {
+          'X-Stara-Test': 'configured',
+          'x-serverless-authorization': 'Bearer header.payload.signature',
+        },
       }),
     );
   });

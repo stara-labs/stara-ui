@@ -53,6 +53,32 @@ describe('StaraNativeRuntime', () => {
     ).toThrow('HTTPS origin');
   });
 
+  test('accepts only matching Gateway and MCP Cloud Run audiences', () => {
+    expect(
+      validateStaraNativeRuntime({
+        ...validEnvironment(),
+        STARA_GATEWAY_URL: 'https://gateway.example.run.app/v1',
+        STARA_GATEWAY_AUDIENCE: 'https://gateway.example.run.app',
+        STARA_MCP_URL: 'https://mcp.example.run.app/mcp',
+        STARA_MCP_AUDIENCE: 'https://mcp.example.run.app/',
+      }),
+    ).toBe(true);
+
+    expect(() =>
+      validateStaraNativeRuntime({
+        ...validEnvironment(),
+        STARA_GATEWAY_URL: 'https://gateway.example.run.app',
+        STARA_GATEWAY_AUDIENCE: 'https://other.example.run.app',
+      }),
+    ).toThrow('STARA_GATEWAY_AUDIENCE must match');
+    expect(() =>
+      validateStaraNativeRuntime({
+        ...validEnvironment(),
+        STARA_MCP_AUDIENCE: 'https://mcp.example.run.app',
+      }),
+    ).toThrow('STARA_MCP_URL is required');
+  });
+
   test('blocks inherited packages from loading a legacy dotenv file', () => {
     const originalConfig = jest.fn();
     const dotenvModule = { config: originalConfig };

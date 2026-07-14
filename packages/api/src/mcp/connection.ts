@@ -21,9 +21,11 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { MCPOAuthTokens } from './oauth/types';
 import type * as t from './types';
 import { createSSRFSafeUndiciConnect, isSSRFTarget, resolveHostnameSSRF } from '~/auth';
+import { getStaraCloudRunIdentityHeaders } from '~/utils/staraCloudRunAuth';
 import { runOutsideTracing } from '~/utils/tracing';
 import { isAddressAllowed } from '~/auth/domain';
 import { sanitizeUrlForLogging } from './utils';
+import { mergeHeaders } from '~/utils/headers';
 import { withTimeout } from '~/utils/promise';
 import { mcpConfig } from './mcpConfig';
 
@@ -1254,6 +1256,15 @@ export class MCPConnection extends EventEmitter {
     return this.requestHeaders;
   }
 
+  private async getTransportRequestHeaders(targetUrl: string): Promise<Record<string, string>> {
+    const cloudRunHeaders = await getStaraCloudRunIdentityHeaders({
+      service: 'mcp',
+      targetName: this.serverName,
+      targetUrl,
+    });
+    return mergeHeaders(this.requestHeaders ?? undefined, cloudRunHeaders) ?? {};
+  }
+
   constructor(params: MCPConnectionParams) {
     super();
     this.options = params.serverConfig;
@@ -1299,7 +1310,11 @@ export class MCPConnection extends EventEmitter {
    * continue using the normal timeout so they fail fast on real errors.
    */
   private createFetchFunction(
-    getHeaders: () => Record<string, string> | null | undefined,
+    getHeaders: () =>
+      | Record<string, string>
+      | null
+      | undefined
+      | Promise<Record<string, string> | null | undefined>,
     timeout?: number,
     sseBodyTimeout?: number,
     configuredSecretHeaderKeys?: ReadonlySet<string>,
@@ -1398,7 +1413,7 @@ export class MCPConnection extends EventEmitter {
       const { urlString, resolvedInit } = await resolveFetchInput(input, init);
 
       const isGet = (resolvedInit?.method ?? 'GET').toUpperCase() === 'GET';
-      const requestHeaders = getHeaders();
+      const requestHeaders = await getHeaders();
       /**
        * Headers that originated from user/server configuration — runtime
        * `setRequestHeaders` plus any keys baked into the transport at
@@ -1656,12 +1671,14 @@ export class MCPConnection extends EventEmitter {
                   this.useSSRFProtection,
                   this.allowedAddresses,
                 );
-                /** Merge headers: SSE defaults < init headers < user headers (user wins) */
+                /** Cloud Run identity is attached last and cannot be overridden by MCP config. */
+                const dynamicHeaders = await this.getTransportRequestHeaders(options.url);
                 const fetchHeaders = Object.assign(
                   {},
                   SSE_REQUEST_HEADERS,
                   resolvedInit?.headers,
                   headers,
+                  dynamicHeaders,
                 );
                 return undiciFetch(urlString, {
                   ...resolvedInit,
@@ -1672,7 +1689,7 @@ export class MCPConnection extends EventEmitter {
               },
             },
             fetch: this.createFetchFunction(
-              this.getRequestHeaders.bind(this),
+              () => this.getTransportRequestHeaders(options.url),
               sseTimeout,
               undefined,
               sseConfiguredSecretHeaderKeys,
@@ -1715,7 +1732,7 @@ export class MCPConnection extends EventEmitter {
               signal: abortController.signal,
             },
             fetch: this.createFetchFunction(
-              this.getRequestHeaders.bind(this),
+              () => this.getTransportRequestHeaders(options.url),
               this.timeout,
               this.sseReadTimeout || DEFAULT_SSE_READ_TIMEOUT,
               httpConfiguredSecretHeaderKeys,
