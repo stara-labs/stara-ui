@@ -1,3 +1,4 @@
+/* eslint-disable i18next/no-literal-string */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button, Spinner, useMediaQuery, useToastContext } from '@librechat/client';
@@ -20,11 +21,13 @@ import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   useActivateStaraTenantMutation,
+  useCreateStaraOrganizationMutation,
   useSaveStaraOnboardingMutation,
   useStaraOnboardingContextQuery,
 } from '~/data-provider';
 import OpenSidebar from '~/components/Chat/Menus/OpenSidebar';
 import { useDocumentTitle, useLocalize } from '~/hooks';
+import { isSafeRedirect } from '~/utils/redirect';
 import { cn } from '~/utils';
 
 type Phase =
@@ -36,7 +39,7 @@ type Phase =
   | 'tenantAddendum'
   | 'complete';
 
-type RecommendedStart = 'chat' | 'memory' | 'routes' | 'approvals' | 'settings';
+type RecommendedStart = 'chat' | 'workflows' | 'activity' | 'approvals' | 'settings';
 
 type ChoiceState = {
   intent?: 'personal' | 'business';
@@ -46,6 +49,7 @@ type ChoiceState = {
   tenantFocus?: RecommendedStart;
   governance?: 'open' | 'balanced' | 'strict';
   selectedTenantId?: string;
+  orgName?: string;
 };
 
 type Option = {
@@ -57,15 +61,15 @@ type Option = {
 
 const personalOptions: Option[] = [
   {
-    id: 'memory',
-    title: 'Build a reliable memory layer',
-    description: 'Start by shaping what Stara should remember, verify, and forget.',
+    id: 'activity',
+    title: 'Build reliable business context',
+    description: 'Start with redacted activity, evidence, and the context Stara can use.',
     icon: Network,
   },
   {
-    id: 'routes',
-    title: 'Route work to the right agent',
-    description: 'Begin with the paths, handoffs, and defaults that steer everyday work.',
+    id: 'workflows',
+    title: 'Automate governed work',
+    description: 'Begin with scoped tasks, checks, pull requests, and deployments.',
     icon: Route,
   },
   {
@@ -86,8 +90,7 @@ const businessOptions: Option[] = [
   {
     id: 'setup',
     title: 'Set up an org',
-    description:
-      'Prepare your preferences for a future org setup. Provisioning is handled elsewhere.',
+    description: 'Create the canonical organization, become its owner, and configure delivery.',
     icon: Building2,
   },
   {
@@ -100,15 +103,15 @@ const businessOptions: Option[] = [
 
 const tenantFocusOptions: Option[] = [
   {
-    id: 'memory',
-    title: 'Visible memory and sources',
-    description: 'Understand which tenant memory layers and source data are available to you.',
+    id: 'activity',
+    title: 'Context and activity',
+    description: 'Understand which redacted evidence and business context are available to you.',
     icon: Network,
   },
   {
-    id: 'routes',
-    title: 'Workflows and routing',
-    description: 'Review the teams, workflows, and agent routes you can use.',
+    id: 'workflows',
+    title: 'Workflows and delivery',
+    description: 'Configure repositories, governed tasks, pull requests, and deployment gates.',
     icon: Route,
   },
   {
@@ -121,28 +124,34 @@ const tenantFocusOptions: Option[] = [
 
 const startRoutes: Record<RecommendedStart, string> = {
   chat: '/c/new',
-  memory: '/stara/memory',
-  routes: '/stara/routes',
+  workflows: '/stara/workflows',
+  activity: '/stara/activity',
   approvals: '/stara/approvals',
   settings: '/stara/settings',
 };
 
 const startLabels: Record<RecommendedStart, string> = {
   chat: 'chat',
-  memory: 'memory',
-  routes: 'routes',
+  workflows: 'workflows',
+  activity: 'activity',
   approvals: 'approvals',
   settings: 'settings',
 };
 
 const getRecommendedStart = (choice?: string): RecommendedStart => {
   if (
-    choice === 'memory' ||
-    choice === 'routes' ||
+    choice === 'workflows' ||
+    choice === 'activity' ||
     choice === 'approvals' ||
     choice === 'settings'
   ) {
     return choice;
+  }
+  if (choice === 'memory') {
+    return 'activity';
+  }
+  if (choice === 'routes') {
+    return 'workflows';
   }
   return 'chat';
 };
@@ -175,6 +184,7 @@ export default function StaraOnboardingView() {
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const reviewMode = searchParams.get('mode') === 'review';
   const redirectTo = searchParams.get('redirect_to');
+  const safeRedirectTo = redirectTo && isSafeRedirect(redirectTo) ? redirectTo : null;
 
   const [phase, setPhase] = useState<Phase>('intent');
   const [choices, setChoices] = useState<ChoiceState>({});
@@ -189,9 +199,13 @@ export default function StaraOnboardingView() {
   const activateTenantMutation = useActivateStaraTenantMutation({
     onSuccess: (data) => setLatestContext(data),
   });
+  const createOrganizationMutation = useCreateStaraOrganizationMutation();
 
   const context = latestContext ?? query.data ?? null;
-  const isBusy = saveMutation.isLoading || activateTenantMutation.isLoading;
+  const isBusy =
+    saveMutation.isLoading ||
+    activateTenantMutation.isLoading ||
+    createOrganizationMutation.isLoading;
 
   useEffect(() => {
     if (!context || initialized.current) {
@@ -273,12 +287,36 @@ export default function StaraOnboardingView() {
     setPhase('tenantAddendum');
   };
 
+  const createBusinessOrganization = async () => {
+    const orgName = choices.orgName?.trim();
+    if (!orgName || !choices.setupPriority) {
+      showToast({
+        message: 'Organization name and delivery focus are required.',
+        status: 'error',
+      });
+      return;
+    }
+
+    try {
+      await createOrganizationMutation.mutateAsync({ name: orgName });
+      await finishAccount('business_setup', 'settings', {
+        orgName,
+        setupPriority: choices.setupPriority,
+      });
+    } catch (error) {
+      showToast({
+        message: error instanceof Error ? error.message : 'Could not create the organization.',
+        status: 'error',
+      });
+    }
+  };
+
   const closeReview = () => {
-    navigate(redirectTo || '/stara/settings');
+    navigate(safeRedirectTo || '/stara/settings');
   };
 
   const continueAfterComplete = () => {
-    navigate(startRoutes[completedStart] ?? redirectTo ?? '/c/new', { replace: true });
+    navigate(safeRedirectTo || startRoutes[completedStart] || '/c/new', { replace: true });
   };
 
   if (query.isLoading && !context) {
@@ -429,31 +467,49 @@ export default function StaraOnboardingView() {
 
               {phase === 'businessSetup' ? (
                 <StepPanel
-                  eyebrow="Org setup intent"
-                  title="What should the future org setup emphasize?"
-                  description="Tenant creation is not part of this flow. Stara will save your intent and keep personal use available."
+                  eyebrow="Create organization"
+                  title="Configure the business control plane"
+                  description="The organization becomes the canonical security boundary. You become its first owner and configure engineering access next."
                   footer={
                     <StepActions
                       back={() => setPhase('businessPath')}
-                      nextLabel="Save setup intent"
-                      nextDisabled={!choices.setupPriority || isBusy}
+                      nextLabel="Create organization"
+                      nextDisabled={!choices.orgName?.trim() || !choices.setupPriority || isBusy}
                       busy={isBusy}
-                      next={() =>
-                        finishAccount('business_setup', getRecommendedStart(choices.setupPriority))
-                      }
+                      next={createBusinessOrganization}
                     />
                   }
                 >
-                  <OptionGrid
-                    options={tenantFocusOptions}
-                    selected={choices.setupPriority}
-                    onSelect={(id) =>
-                      setChoices((prev) => ({
-                        ...prev,
-                        setupPriority: getRecommendedStart(id),
-                      }))
-                    }
-                  />
+                  <div className="grid gap-5">
+                    <label className="grid gap-1.5 text-sm font-medium text-text-primary">
+                      Organization name
+                      <input
+                        className="h-11 border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-medium"
+                        value={choices.orgName ?? ''}
+                        onChange={(event) =>
+                          setChoices((prev) => ({ ...prev, orgName: event.target.value }))
+                        }
+                        autoComplete="organization"
+                      />
+                    </label>
+                    <div>
+                      <h3 className="text-sm font-semibold text-text-primary">
+                        First delivery focus
+                      </h3>
+                      <div className="mt-3">
+                        <OptionGrid
+                          options={tenantFocusOptions}
+                          selected={choices.setupPriority}
+                          onSelect={(id) =>
+                            setChoices((prev) => ({
+                              ...prev,
+                              setupPriority: getRecommendedStart(id),
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </StepPanel>
               ) : null}
 
