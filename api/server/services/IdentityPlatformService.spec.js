@@ -138,6 +138,26 @@ describe('IdentityPlatformService', () => {
     );
   });
 
+  it('ignores the local MFA assurance claim outside the Identity emulator', () => {
+    const claims = identityClaims({ includeSecondFactor: false });
+
+    expect(identityPlatformUser({ ...claims, stara_mfa_enrolled: true })).toMatchObject({
+      twoFactorEnabled: false,
+    });
+  });
+
+  it('accepts the local MFA assurance claim only with the Identity emulator configured', () => {
+    process.env.STARA_IDENTITY_PLATFORM_EMULATOR_URL = 'http://127.0.0.1:9099';
+    const claims = identityClaims({ includeSecondFactor: false });
+
+    expect(identityPlatformUser({ ...claims, stara_mfa_enrolled: true })).toMatchObject({
+      twoFactorEnabled: true,
+    });
+    expect(identityPlatformUser({ ...claims, stara_mfa_enrolled: 'true' })).toMatchObject({
+      twoFactorEnabled: false,
+    });
+  });
+
   it('fails closed when no project is configured', async () => {
     delete process.env.STARA_IDENTITY_PLATFORM_PROJECT_ID;
     delete process.env.GOOGLE_CLOUD_PROJECT;
@@ -148,7 +168,7 @@ describe('IdentityPlatformService', () => {
   });
 });
 
-function identityClaims() {
+function identityClaims({ includeSecondFactor = true } = {}) {
   return {
     sub: 'identity-user-1',
     email: 'Owner@Example.com',
@@ -156,7 +176,7 @@ function identityClaims() {
     email_verified: true,
     firebase: {
       tenant: 'workforce-tenant',
-      sign_in_second_factor: 'totp',
+      ...(includeSecondFactor ? { sign_in_second_factor: 'totp' } : {}),
     },
   };
 }
