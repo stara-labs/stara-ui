@@ -101,6 +101,11 @@ const identityPlatformUser = (decodedToken) => {
     throw error;
   }
   const secondFactor = safeString(decodedToken?.firebase?.sign_in_second_factor);
+  // The Auth emulator cannot issue TOTP-backed tokens. This test-only claim is
+  // ignored unless the browser is explicitly configured to use the emulator.
+  const emulatorMfaEnrolled =
+    Boolean(safeString(process.env.STARA_IDENTITY_PLATFORM_EMULATOR_URL)) &&
+    decodedToken?.stara_mfa_enrolled === true;
 
   return {
     id: identitySubject,
@@ -111,7 +116,7 @@ const identityPlatformUser = (decodedToken) => {
     provider: 'identity-platform',
     role: SystemRoles.USER,
     emailVerified: decodedToken?.email_verified === true,
-    twoFactorEnabled: Boolean(secondFactor),
+    twoFactorEnabled: Boolean(secondFactor) || emulatorMfaEnrolled,
   };
 };
 
