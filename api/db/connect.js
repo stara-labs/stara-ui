@@ -1,15 +1,14 @@
-require('dotenv').config();
+const { staraNativeRuntimeEnabled } = require('../server/services/StaraNativeRuntime');
+
+if (!staraNativeRuntimeEnabled()) {
+  require('dotenv').config();
+}
 const { isEnabled, instrumentMongooseQueryMetrics } = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 
 const mongoose = require('mongoose');
-const MONGO_URI = process.env.MONGO_URI;
 
 instrumentMongooseQueryMetrics(mongoose);
-
-if (!MONGO_URI) {
-  throw new Error('Please define the MONGO_URI environment variable');
-}
 /** The maximum number of connections in the connection pool. */
 const maxPoolSize = parseInt(process.env.MONGO_MAX_POOL_SIZE) || undefined;
 /** The minimum number of connections in the connection pool. */
@@ -47,6 +46,15 @@ mongoose.connection.on('error', (err) => {
 });
 
 async function connectDb() {
+  if (staraNativeRuntimeEnabled()) {
+    return null;
+  }
+
+  const mongoUri = process.env.MONGO_URI;
+  if (!mongoUri) {
+    throw new Error('Please define the MONGO_URI environment variable');
+  }
+
   if (cached.conn && cached.conn?._readyState === 1) {
     return cached.conn;
   }
@@ -71,7 +79,7 @@ async function connectDb() {
     logger.info('Mongo Connection options');
     logger.info(JSON.stringify(opts, null, 2));
     mongoose.set('strictQuery', true);
-    cached.promise = mongoose.connect(MONGO_URI, opts).then((mongoose) => {
+    cached.promise = mongoose.connect(mongoUri, opts).then((mongoose) => {
       return mongoose;
     });
   }

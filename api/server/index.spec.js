@@ -50,13 +50,16 @@ jest.mock(
 describe('Telemetry wiring', () => {
   const source = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
 
-  it('loads telemetry before other server imports', () => {
-    const firstStatement = source
-      .split('\n')
-      .map((line) => line.trim())
-      .find(Boolean);
+  it('loads telemetry after the native environment guard and before server dependencies', () => {
+    const environmentGuardIndex = source.indexOf('disableDotenvFileLoadingForNativeRuntime();');
+    const telemetryIndex = source.indexOf("const telemetry = require('./telemetry');");
+    const corsIndex = source.indexOf("const cors = require('cors');");
+    const dataSchemasIndex = source.indexOf("require('@librechat/data-schemas')");
 
-    expect(firstStatement).toBe("const telemetry = require('./telemetry');");
+    expect(environmentGuardIndex).toBeGreaterThan(-1);
+    expect(telemetryIndex).toBeGreaterThan(environmentGuardIndex);
+    expect(telemetryIndex).toBeLessThan(corsIndex);
+    expect(telemetryIndex).toBeLessThan(dataSchemasIndex);
   });
 
   it('mounts telemetry middleware after static assets and before routes', () => {

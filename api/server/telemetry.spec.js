@@ -1,13 +1,15 @@
 describe('telemetry bootstrap', () => {
   const originalEnv = process.env;
+  const mockDotenvConfig = jest.fn();
 
   beforeEach(() => {
     jest.resetModules();
     process.env = { ...originalEnv };
     delete process.env.OTEL_SDK_DISABLED;
     delete process.env.OTEL_TRACING_ENABLED;
+    delete process.env.STARA_NATIVE_RUNTIME;
     jest.doMock('dotenv', () => ({
-      config: jest.fn(),
+      config: mockDotenvConfig,
     }));
   });
 
@@ -31,6 +33,16 @@ describe('telemetry bootstrap', () => {
 
     expect(telemetry.enabled).toBe(false);
     expect(telemetry.status).toBe('disabled');
+    expect(mockDotenvConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not load a dotenv file in native mode', () => {
+    process.env.STARA_NATIVE_RUNTIME = 'true';
+
+    const telemetry = require('./telemetry');
+
+    expect(telemetry.enabled).toBe(false);
+    expect(mockDotenvConfig).not.toHaveBeenCalled();
   });
 
   it('does not load OpenTelemetry packages when the SDK is disabled', () => {

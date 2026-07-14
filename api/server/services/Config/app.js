@@ -8,6 +8,19 @@ const { applyStaraControlPlaneDefaults } = require('./staraDefaults');
 const getLogStores = require('~/cache/getLogStores');
 const paths = require('~/config/paths');
 const db = require('~/models');
+const { staraNativeRuntimeEnabled } = require('~/server/services/StaraNativeRuntime');
+
+const configDataSources = staraNativeRuntimeEnabled()
+  ? {
+      // Native configuration is deployment-owned. Per-user Mongo overrides would reintroduce
+      // a second source of truth and can buffer requests on a disconnected Mongoose model.
+      getApplicableConfigs: async () => [],
+      getUserPrincipals: async () => [],
+    }
+  : {
+      getApplicableConfigs: db.getApplicableConfigs,
+      getUserPrincipals: db.getUserPrincipals,
+    };
 
 const loadBaseConfig = async () => {
   /** @type {TCustomConfig} */
@@ -26,8 +39,8 @@ const { getAppConfig, clearAppConfigCache, clearOverrideCache } = createAppConfi
   setCachedTools,
   getCache: getLogStores,
   cacheKeys: CacheKeys,
-  getApplicableConfigs: db.getApplicableConfigs,
-  getUserPrincipals: db.getUserPrincipals,
+  getApplicableConfigs: configDataSources.getApplicableConfigs,
+  getUserPrincipals: configDataSources.getUserPrincipals,
 });
 
 /**

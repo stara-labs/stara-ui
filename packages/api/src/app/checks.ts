@@ -140,14 +140,19 @@ export function checkVariables(): void {
  * Logs information or warning based on the API's availability and response.
  */
 export async function checkHealth(): Promise<void> {
+  const ragApiUrl = process.env.RAG_API_URL?.trim();
+  if (!ragApiUrl) {
+    return;
+  }
+
   try {
-    const response = await fetch(`${process.env.RAG_API_URL}/health`);
+    const response = await fetch(`${ragApiUrl}/health`);
     if (response?.ok && response?.status === 200) {
-      logger.info(`RAG API is running and reachable at ${process.env.RAG_API_URL}.`);
+      logger.info(`RAG API is running and reachable at ${ragApiUrl}.`);
     }
   } catch {
     logger.warn(
-      `RAG API is either not running or not reachable at ${process.env.RAG_API_URL}, you may experience errors with file uploads.`,
+      `RAG API is either not running or not reachable at ${ragApiUrl}, you may experience errors with file uploads.`,
     );
   }
 }
