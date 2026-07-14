@@ -29,6 +29,30 @@ describe('StaraNativeRuntime', () => {
     expect(validateStaraNativeRuntime(validEnvironment())).toBe(true);
   });
 
+  test('accepts only a matching HTTPS Cloud Run API audience', () => {
+    expect(
+      validateStaraNativeRuntime({
+        ...validEnvironment(),
+        STARA_API_URL: 'https://api.example.run.app',
+        STARA_API_AUDIENCE: 'https://api.example.run.app/',
+      }),
+    ).toBe(true);
+    expect(() =>
+      validateStaraNativeRuntime({
+        ...validEnvironment(),
+        STARA_API_URL: 'https://api.example.run.app',
+        STARA_API_AUDIENCE: 'https://other.example.run.app',
+      }),
+    ).toThrow('must match');
+    expect(() =>
+      validateStaraNativeRuntime({
+        ...validEnvironment(),
+        STARA_API_URL: 'https://api.example.run.app',
+        STARA_API_AUDIENCE: 'http://api.example.run.app',
+      }),
+    ).toThrow('HTTPS origin');
+  });
+
   test('blocks inherited packages from loading a legacy dotenv file', () => {
     const originalConfig = jest.fn();
     const dotenvModule = { config: originalConfig };

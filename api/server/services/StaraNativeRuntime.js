@@ -1,3 +1,5 @@
+const { validateStaraApiAudience } = require('./StaraCloudRunAuth');
+
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
 
@@ -98,6 +100,15 @@ function validateStaraNativeRuntime(env = process.env) {
       }
     } catch {
       errors.push('STARA_API_URL must be a valid URL.');
+    }
+  }
+
+  const apiAudience = String(env.STARA_API_AUDIENCE ?? '').trim();
+  if (apiAudience && apiUrl) {
+    try {
+      validateStaraApiAudience(apiUrl, apiAudience);
+    } catch (error) {
+      errors.push(error.message);
     }
   }
 
