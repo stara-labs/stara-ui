@@ -5,6 +5,7 @@
 **/.DS_Store
 **/.vscode
 **/node_modules
+gha-creds-*.json
 
 # Specific patterns to ignore
 data-node

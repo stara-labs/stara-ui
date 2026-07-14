@@ -1,0 +1,108 @@
+name: Publish Stara UI image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-stara-ui-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish immutable merge-SHA image
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      vars.STARA_GCP_WIF_PROVIDER != '' &&
+      vars.STARA_GCP_BUILD_SERVICE_ACCOUNT != '' &&
+      vars.STARA_GCP_PROJECT_ID != '' &&
+      vars.STARA_GCP_REGION != '' &&
+      vars.STARA_ARTIFACT_REPOSITORY != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout merge commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ vars.STARA_GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.STARA_GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.STARA_GCP_BUILD_SERVICE_ACCOUNT }}
+
+      - name: Install Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Configure Artifact Registry authentication
+        shell: bash
+        run: gcloud auth configure-docker "${{ vars.STARA_GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Resolve immutable image reference
+        id: image
+        shell: bash
+        env:
+          REGISTRY: ${{ vars.STARA_GCP_REGION }}-docker.pkg.dev
+          PROJECT_ID: ${{ vars.STARA_GCP_PROJECT_ID }}
+          REPOSITORY: ${{ vars.STARA_ARTIFACT_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          image="${REGISTRY}/${PROJECT_ID}/${REPOSITORY}/stara-ui:${GITHUB_SHA}"
+          printf 'ref=%s\n' "$image" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            printf 'exists=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'exists=false\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute build date
+        if: steps.image.outputs.exists != 'true'
+        id: metadata
+        shell: bash
+        run: printf 'date=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish image
+        if: steps.image.outputs.exists != 'true'
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.ref }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            BUILD_COMMIT=${{ github.sha }}
+            BUILD_BRANCH=main
+            BUILD_DATE=${{ steps.metadata.outputs.date }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=stara-ui-production
+          cache-to: type=gha,mode=max,scope=stara-ui-production
+
+      - name: Report immutable image
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+          EXISTED: ${{ steps.image.outputs.exists }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ "$EXISTED" == "true" ]]; then
+            printf 'Image already exists and immutable tag was preserved: %s\n' "$IMAGE"
+          else
+            printf 'Published %s at digest %s\n' "$IMAGE" "$DIGEST"
+          fi
