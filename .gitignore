@@ -181,3 +181,4 @@ hive-mind-prompt-*.txt
 CLAUDE.md
 .gsd
 codedb.snapshot
+gha-creds-*.json
