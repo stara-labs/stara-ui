@@ -31,6 +31,12 @@ jest.mock('~/cache', () => ({
   tokenConfigCache: jest.fn(() => ({ get: jest.fn().mockResolvedValue(null) })),
 }));
 
+const mockGetStaraCloudRunIdentityHeaders = jest.fn().mockResolvedValue({});
+jest.mock('~/utils/staraCloudRunAuth', () => ({
+  getStaraCloudRunIdentityHeaders: (...args: unknown[]) =>
+    mockGetStaraCloudRunIdentityHeaders(...args),
+}));
+
 jest.mock('~/utils', () => ({
   isUserProvided: (val: string) => val === 'user_provided',
   checkUserKeyExpiry: jest.fn(),
@@ -83,6 +89,50 @@ function createParams(overrides: {
 describe('initializeCustom – Agents API user key resolution', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetStaraCloudRunIdentityHeaders.mockResolvedValue({});
+  });
+
+  it('adds server-only Cloud Run identity to the Stara Gateway client', async () => {
+    mockGetStaraCloudRunIdentityHeaders.mockResolvedValue({
+      'x-serverless-authorization': 'Bearer header.payload.signature',
+    });
+    const params = createParams({
+      apiKey: 'stara-key',
+      baseURL: 'https://gateway.example.run.app/v1',
+      headers: { 'X-Stara-Test': 'configured' },
+    });
+    params.endpoint = 'Stara Gateway';
+
+    await initializeCustom(params);
+
+    expect(mockGetStaraCloudRunIdentityHeaders).toHaveBeenCalledWith({
+      service: 'gateway',
+      targetName: 'Stara Gateway',
+      targetUrl: 'https://gateway.example.run.app/v1',
+    });
+    expect(mockGetOpenAIConfig).toHaveBeenCalledWith(
+      'stara-key',
+      expect.objectContaining({
+        headers: {
+          'X-Stara-Test': 'configured',
+          'x-serverless-authorization': 'Bearer header.payload.signature',
+        },
+      }),
+      'Stara Gateway',
+    );
+  });
+
+  it('never mints Stara Cloud Run identity for a user-provided URL', async () => {
+    const params = createParams({
+      apiKey: 'stara-key',
+      baseURL: AuthType.USER_PROVIDED,
+      userBaseURL: 'https://user-controlled.example/v1',
+    });
+    params.endpoint = 'Stara Gateway';
+
+    await initializeCustom(params);
+
+    expect(mockGetStaraCloudRunIdentityHeaders).not.toHaveBeenCalled();
   });
 
   it('should fetch user key even when expiresAt is not in request body (Agents API flow)', async () => {

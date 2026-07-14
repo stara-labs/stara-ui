@@ -4,7 +4,7 @@ const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 const clients = new Map();
 let auth;
 
-const normalizeCloudRunAudience = (value) => {
+const normalizeCloudRunAudience = (value, serviceLabel = 'Stara API') => {
   const url = new URL(String(value ?? '').trim());
   if (
     url.protocol !== 'https:' ||
@@ -15,22 +15,38 @@ const normalizeCloudRunAudience = (value) => {
     (url.pathname !== '/' && url.pathname !== '')
   ) {
     throw new Error(
-      'The Stara API Cloud Run audience must be an HTTPS origin without credentials, path, query, or fragment.',
+      `The ${serviceLabel} Cloud Run audience must be an HTTPS origin without credentials, path, query, or fragment.`,
     );
   }
   return url.origin;
 };
 
-const validateStaraApiAudience = (apiBaseUrl, rawAudience) => {
+const validateStaraServiceAudience = ({
+  serviceUrl,
+  rawAudience,
+  environmentVariable,
+  serviceLabel,
+}) => {
   const configured = String(rawAudience ?? '').trim();
   if (!configured) {
     return undefined;
   }
-  const audience = normalizeCloudRunAudience(configured);
-  if (new URL(apiBaseUrl).origin !== audience) {
-    throw new Error('STARA_API_AUDIENCE must match the configured Stara API service origin.');
+  const audience = normalizeCloudRunAudience(configured, serviceLabel);
+  if (new URL(serviceUrl).origin !== audience) {
+    throw new Error(
+      `${environmentVariable} must match the configured ${serviceLabel} service origin.`,
+    );
   }
   return audience;
+};
+
+const validateStaraApiAudience = (apiBaseUrl, rawAudience) => {
+  return validateStaraServiceAudience({
+    serviceUrl: apiBaseUrl,
+    rawAudience,
+    environmentVariable: 'STARA_API_AUDIENCE',
+    serviceLabel: 'Stara API',
+  });
 };
 
 const configuredAudience = (apiBaseUrl) =>
@@ -66,4 +82,5 @@ module.exports = {
   cloudRunIdentityHeaders,
   normalizeCloudRunAudience,
   validateStaraApiAudience,
+  validateStaraServiceAudience,
 };
