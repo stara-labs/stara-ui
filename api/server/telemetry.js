@@ -1,4 +1,8 @@
-require('dotenv').config();
+const { staraNativeRuntimeEnabled } = require('./services/StaraNativeRuntime');
+
+if (!staraNativeRuntimeEnabled()) {
+  require('dotenv').config();
+}
 
 function isTruthy(value) {
   return value?.trim().toLowerCase() === 'true';

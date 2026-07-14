@@ -4,6 +4,7 @@ const {
   listCanonicalFiles,
 } = require('~/server/services/CanonicalFileService');
 const { getCanonicalRequestUser } = require('~/server/services/StaraApiClient');
+const { staraNativeRuntimeEnabled } = require('~/server/services/StaraNativeRuntime');
 
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
 
@@ -47,6 +48,9 @@ const createCanonicalFileMethods = (baseMethods) => {
 };
 
 const legacyFileReadFallbackEnabled = () => {
+  if (staraNativeRuntimeEnabled()) {
+    return false;
+  }
   const value = process.env.STARA_LEGACY_FILE_READ_FALLBACK;
   return value == null || !FALSE_VALUES.has(String(value).trim().toLowerCase());
 };

@@ -1,7 +1,12 @@
-require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 require('module-alias')({ base: path.resolve(__dirname, '..') });
+const { staraNativeRuntimeEnabled } = require('./services/StaraNativeRuntime');
+
+if (staraNativeRuntimeEnabled()) {
+  throw new Error('STARA_NATIVE_RUNTIME is supported only by api/server/index.js.');
+}
+require('dotenv').config();
 const cluster = require('cluster');
 const Redis = require('ioredis');
 const cors = require('cors');

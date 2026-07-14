@@ -7,16 +7,50 @@ jest.mock('@librechat/data-schemas', () => ({
   ...jest.requireActual('@librechat/data-schemas'),
   logger: {
     debug: jest.fn(),
+    info: jest.fn(),
     warn: jest.fn(),
   },
 }));
 
 import { handleRateLimits } from './limits';
-import { checkWebSearchConfig } from './checks';
+import { checkHealth, checkWebSearchConfig } from './checks';
 import { logger } from '@librechat/data-schemas';
 import { extractVariableName as extract } from 'librechat-data-provider';
 
 const extractVariableName = extract as jest.MockedFunction<typeof extract>;
+
+describe('checkHealth', () => {
+  const originalRagApiUrl = process.env.RAG_API_URL;
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    if (originalRagApiUrl == null) {
+      delete process.env.RAG_API_URL;
+    } else {
+      process.env.RAG_API_URL = originalRagApiUrl;
+    }
+  });
+
+  it('does not probe RAG when the service is not configured', async () => {
+    delete process.env.RAG_API_URL;
+    const fetchSpy = jest.spyOn(global, 'fetch');
+
+    await checkHealth();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('probes the configured RAG health endpoint', async () => {
+    process.env.RAG_API_URL = 'http://rag-api:8000';
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    await checkHealth();
+
+    expect(fetchSpy).toHaveBeenCalledWith('http://rag-api:8000/health');
+  });
+});
 
 describe('checkWebSearchConfig', () => {
   let originalEnv: NodeJS.ProcessEnv;

@@ -1,7 +1,20 @@
-const telemetry = require('./telemetry');
 const fs = require('fs');
 const path = require('path');
 require('module-alias')({ base: path.resolve(__dirname, '..') });
+const {
+  disableDotenvFileLoadingForNativeRuntime,
+  staraNativeRuntimeEnabled,
+  validateStaraNativeRuntime,
+} = require('./services/StaraNativeRuntime');
+
+if (staraNativeRuntimeEnabled()) {
+  disableDotenvFileLoadingForNativeRuntime();
+  // Some inherited packages preload dotenv. Point that loader at a deliberately absent file so
+  // native startup cannot inherit Mongo, Redis, Meili, or RAG settings from a legacy local .env.
+  process.env.DOTENV_CONFIG_PATH = path.resolve(__dirname, '../../.stara-native-no-dotenv');
+}
+
+const telemetry = require('./telemetry');
 const cors = require('cors');
 const axios = require('axios');
 const express = require('express');
@@ -102,6 +115,7 @@ const configureGenerationStreams = () => {
 };
 
 const startServer = async () => {
+  const nativeRuntime = validateStaraNativeRuntime();
   const { metricsMiddleware, metricsRouter } = createMetrics();
   if (!process.env.METRICS_SECRET) {
     logger.warn('[metrics] METRICS_SECRET is not set - /metrics will return 401 for all requests');
@@ -110,12 +124,15 @@ const startServer = async () => {
   if (typeof Bun !== 'undefined') {
     axios.defaults.headers.common['Accept-Encoding'] = 'gzip';
   }
-  await connectDb();
-
-  logger.info('Connected to MongoDB');
-  indexSync().catch((err) => {
-    logger.error('[indexSync] Background sync failed:', err);
-  });
+  if (nativeRuntime) {
+    logger.info('Starting the native Stara runtime with canonical control-plane persistence.');
+  } else {
+    await connectDb();
+    logger.info('Connected to MongoDB');
+    indexSync().catch((err) => {
+      logger.error('[indexSync] Background sync failed:', err);
+    });
+  }
 
   app.disable('x-powered-by');
   app.set('trust proxy', trusted_proxy);
@@ -127,19 +144,23 @@ const startServer = async () => {
     );
   }
 
-  await runAsSystem(seedDatabase);
-  /* Recover stuck `status: 'pending'` records from a crash mid-render.
-   * `runAsSystem` is required — `File` is tenant-isolated and strict
-   * mode rejects unscoped queries. Lazy sweep in the preview endpoint
-   * covers anything younger than the boot cutoff. */
-  runAsSystem(sweepOrphanedPreviews).catch((err) => {
-    logger.error('[sweepOrphanedPreviews] Background sweep failed:', err);
-  });
+  if (!nativeRuntime) {
+    await runAsSystem(seedDatabase);
+    /* Recover stuck `status: 'pending'` records from a crash mid-render.
+     * `runAsSystem` is required — `File` is tenant-isolated and strict
+     * mode rejects unscoped queries. Lazy sweep in the preview endpoint
+     * covers anything younger than the boot cutoff. */
+    runAsSystem(sweepOrphanedPreviews).catch((err) => {
+      logger.error('[sweepOrphanedPreviews] Background sweep failed:', err);
+    });
+  }
   const appConfig = await getAppConfig({ baseOnly: true });
   initializeFileStorage(appConfig);
   await initializeDeploymentSkills({ projectRoot: path.resolve(__dirname, '../..') });
   initializeGitHubSkillSync(appConfig);
-  startExpiredFileSweep({ appConfig, loadAppConfig: getAppConfig });
+  if (!nativeRuntime) {
+    startExpiredFileSweep({ appConfig, loadAppConfig: getAppConfig });
+  }
   // Register any programmatic tool-approval policy hooks declared in
   // `endpoints.agents.toolApproval.hooks`. Honor the `enabled` kill switch: when tool
   // approval is off we pass no hooks, so a disabled endpoint imports/runs nothing (and any
@@ -152,7 +173,9 @@ const startServer = async () => {
   });
   await runAsSystem(async () => {
     await performStartupChecks(appConfig);
-    await updateInterfacePermissions({ appConfig, getRoleByName, updateAccessPermissions });
+    if (!nativeRuntime) {
+      await updateInterfacePermissions({ appConfig, getRoleByName, updateAccessPermissions });
+    }
   });
 
   const indexPath = path.join(appConfig.paths.dist, 'index.html');
@@ -236,7 +259,7 @@ const startServer = async () => {
     app.use(telemetry.telemetryMiddleware);
   }
 
-  if (!ALLOW_SOCIAL_LOGIN) {
+  if (!nativeRuntime && !ALLOW_SOCIAL_LOGIN) {
     console.warn('Social logins are disabled. Set ALLOW_SOCIAL_LOGIN=true to enable them.');
   }
 
@@ -245,16 +268,18 @@ const startServer = async () => {
   if (identityPlatformAuthEnabled()) {
     passport.use(identityPlatformLogin());
   }
-  passport.use(jwtLogin());
-  passport.use(passportLogin());
+  if (!nativeRuntime) {
+    passport.use(jwtLogin());
+    passport.use(passportLogin());
 
-  /* LDAP Auth */
-  if (process.env.LDAP_URL && process.env.LDAP_USER_SEARCH_BASE) {
-    passport.use(ldapLogin);
-  }
+    /* LDAP Auth */
+    if (process.env.LDAP_URL && process.env.LDAP_USER_SEARCH_BASE) {
+      passport.use(ldapLogin);
+    }
 
-  if (isEnabled(ALLOW_SOCIAL_LOGIN)) {
-    await configureSocialLogins(app);
+    if (isEnabled(ALLOW_SOCIAL_LOGIN)) {
+      await configureSocialLogins(app);
+    }
   }
 
   /* Per-request capability cache — must be registered before any route that calls hasCapability */
@@ -347,9 +372,13 @@ const startServer = async () => {
     try {
       await runAsSystem(async () => {
         await initializeMCPs();
-        await initializeOAuthReconnectManager();
+        if (!nativeRuntime) {
+          await initializeOAuthReconnectManager();
+        }
       });
-      await checkMigrations();
+      if (!nativeRuntime) {
+        await checkMigrations();
+      }
 
       const inspectFlags = process.execArgv.some((arg) => arg.startsWith('--inspect'));
       if (inspectFlags || isEnabled(process.env.MEM_DIAG)) {

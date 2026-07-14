@@ -40,6 +40,7 @@ describe('canonical file model adapter', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env.STARA_NATIVE_RUNTIME;
     delete process.env.STARA_LEGACY_FILE_READ_FALLBACK;
     getUserId.mockReturnValue('user-1');
     canonicalFilesEnabled.mockReturnValue(true);
@@ -70,6 +71,14 @@ describe('canonical file model adapter', () => {
 
   it('can disable the Mongo fallback after offline migration', async () => {
     process.env.STARA_LEGACY_FILE_READ_FALLBACK = 'false';
+    const methods = createCanonicalFileMethods(baseMethods);
+
+    await expect(methods.getFiles({ file_id: canonical.file_id })).resolves.toEqual([canonical]);
+    expect(baseMethods.getFiles).not.toHaveBeenCalled();
+  });
+
+  it('never reads the Mongo fallback in native mode', async () => {
+    process.env.STARA_NATIVE_RUNTIME = 'true';
     const methods = createCanonicalFileMethods(baseMethods);
 
     await expect(methods.getFiles({ file_id: canonical.file_id })).resolves.toEqual([canonical]);
