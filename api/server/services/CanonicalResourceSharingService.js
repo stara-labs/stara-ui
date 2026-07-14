@@ -76,6 +76,27 @@ const getCanonicalResourceRoles = async (user, resourceType) => {
 const getCanonicalResourcePermissions = async (user, resourceType, resourceId) =>
   permissionsResponse(await loadSharingContext(user, resourceType, resourceId));
 
+const hasCanonicalResourcePermission = async (
+  user,
+  resourceType,
+  resourceId,
+  requiredPermission,
+) => {
+  const config = requireConfig(resourceType);
+  const id = config.canonicalId(resourceId);
+  if (!id) throw httpError(`A canonical ${resourceType} UUID is required.`, 400);
+  const response = await request(
+    user,
+    `/v1/${config.apiCollection}/${encodeURIComponent(id)}/access`,
+  );
+  const granted = new Set(
+    Array.isArray(response.access?.permissions) ? response.access.permissions : [],
+  );
+  return requiredPermissionNames(config, requiredPermission).every((permission) =>
+    granted.has(permission),
+  );
+};
+
 const updateCanonicalResourcePermissions = async (user, resourceType, resourceId, input = {}) => {
   const context = await loadSharingContext(user, resourceType, resourceId);
   if (input.public === true || input.publicAccessRoleId) {
@@ -267,6 +288,16 @@ const permissionBits = (config, permissions) => {
   );
 };
 
+const requiredPermissionNames = (config, requiredPermission) => {
+  const prefix = config.permissionPrefix;
+  return [
+    ...((requiredPermission & PermissionBits.VIEW) !== 0 ? [`${prefix}.read`] : []),
+    ...((requiredPermission & PermissionBits.EDIT) !== 0 ? [`${prefix}.edit`] : []),
+    ...((requiredPermission & PermissionBits.DELETE) !== 0 ? [`${prefix}.delete`] : []),
+    ...((requiredPermission & PermissionBits.SHARE) !== 0 ? [`${prefix}.share`] : []),
+  ];
+};
+
 const requireRoleId = (config, roleKey) => {
   const roleId = config.roleIds[roleKey];
   if (!roleId) throw new Error(`Unsupported canonical role: ${roleKey}`);
@@ -319,6 +350,7 @@ const httpError = (message, status) => Object.assign(new Error(message), { statu
 module.exports = {
   getCanonicalResourcePermissions,
   getCanonicalResourceRoles,
+  hasCanonicalResourcePermission,
   isCanonicalResourceSharing,
   searchCanonicalPrincipals,
   updateCanonicalResourcePermissions,
