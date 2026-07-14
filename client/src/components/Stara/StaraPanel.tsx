@@ -18,7 +18,7 @@ export default function StaraPanel() {
               to={`/stara/${section.id}`}
               className={({ isActive }) =>
                 cn(
-                  'flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors',
+                  'flex min-h-11 items-center gap-3 px-3 py-2 text-left transition-colors',
                   isActive
                     ? 'bg-surface-active-alt text-text-primary'
                     : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
@@ -26,10 +26,7 @@ export default function StaraPanel() {
               }
             >
               <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{section.label}</span>
-                <span className="block truncate text-xs opacity-80">{section.status}</span>
-              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{section.label}</span>
             </RouterNavLink>
           );
         })}
