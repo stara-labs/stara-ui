@@ -27,6 +27,7 @@ jest.mock('~/server/services/Config', () => ({
 
 jest.mock('../StaraServiceClient', () => ({
   callStaraApi: (...args) => mockCallStaraApi(...args),
+  identitySubject: (user) => user?.identitySubject ?? `librechat:${user?.id}`,
 }));
 
 jest.mock('@librechat/api', () => ({
@@ -227,7 +228,9 @@ describe('resolveAllMcpConfigs', () => {
         headers: {
           'x-operator-header': 'preserved',
           'x-stara-tenant-id': 'tenant-1',
+          'x-stara-identity-subject': 'librechat:u1',
           'x-stara-actor-id': 'canonical-user-1',
+          'x-stara-actor-email': '{{LIBRECHAT_USER_EMAIL}}',
           'x-stara-scope': 'team:operations',
           'x-stara-role-ids': 'member',
           'x-stara-grants': 'stara.memory.read',

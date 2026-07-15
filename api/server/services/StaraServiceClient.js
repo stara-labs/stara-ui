@@ -110,6 +110,7 @@ module.exports = {
   callStaraApi,
   callStaraApiPublic,
   getUserId,
+  identitySubject,
   normalizeEmail,
   safeString,
   staraApiBaseUrl,
