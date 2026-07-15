@@ -44,7 +44,7 @@ const { createOboTrustChecker } = require('./OboPolicyService');
 const { reinitMCPServer } = require('./Tools/mcp');
 const { getAppConfig } = require('./Config');
 const { STARA_MCP_SERVER_NAME } = require('./Config/staraDefaults');
-const { callStaraApi } = require('./StaraServiceClient');
+const { callStaraApi, identitySubject } = require('./StaraServiceClient');
 const { getLogStores } = require('~/cache');
 
 const MAX_CACHE_SIZE = 1000;
@@ -201,7 +201,9 @@ async function applyCanonicalStaraMcpContext(configs, user, registry) {
       headers: {
         ...(server.headers ?? {}),
         'x-stara-tenant-id': membership.tenant_key ?? tenantId,
+        'x-stara-identity-subject': identitySubject(user),
         'x-stara-actor-id': actorId,
+        'x-stara-actor-email': '{{LIBRECHAT_USER_EMAIL}}',
         'x-stara-scope': scopes.join(','),
         'x-stara-role-ids': roleId,
         'x-stara-grants': grants.join(','),
