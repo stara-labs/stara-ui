@@ -132,6 +132,12 @@ export function installRumBootstrap(targetWindow) {
       });
     });
     targetNavigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type === 'LC_SW_UPDATE_READY') {
+        targetWindow.__lcUpdateAvailable = true;
+        targetWindow.__lcRumPush('sw-update-ready');
+        targetWindow.dispatchEvent(new Event('lc-sw-update-ready'));
+        return;
+      }
       if (!event.data || event.data.type !== 'LC_SW_PING') {
         return;
       }
