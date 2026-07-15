@@ -6,6 +6,7 @@
  * that cannot answer. */
 const PING_TYPE = 'LC_SW_PING';
 const PONG_TYPE = 'LC_SW_PONG';
+const UPDATE_READY_TYPE = 'LC_SW_UPDATE_READY';
 const PONG_TIMEOUT_MS = 1500;
 
 const pendingPongs = new Map();
@@ -17,7 +18,10 @@ self.addEventListener('message', (event) => {
   const resolvePong = pendingPongs.get(event.source.id);
   if (resolvePong) {
     pendingPongs.delete(event.source.id);
-    resolvePong(true);
+    resolvePong({
+      responsive: true,
+      hadController: event.data.hadController === true,
+    });
   }
 });
 
@@ -26,7 +30,7 @@ function pingClient(client) {
     pendingPongs.set(client.id, resolve);
     setTimeout(() => {
       if (pendingPongs.delete(client.id)) {
-        resolve(false);
+        resolve({ responsive: false, hadController: false });
       }
     }, PONG_TIMEOUT_MS);
     client.postMessage({ type: PING_TYPE });
@@ -42,8 +46,11 @@ async function reloadUnresponsiveClients() {
   const topLevelClients = windowClients.filter((client) => client.frameType !== 'nested');
   await Promise.all(
     topLevelClients.map(async (client) => {
-      const responsive = await pingClient(client);
-      if (responsive) {
+      const result = await pingClient(client);
+      if (result.responsive) {
+        if (result.hadController) {
+          client.postMessage({ type: UPDATE_READY_TYPE });
+        }
         return;
       }
       try {

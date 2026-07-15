@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-qu
 import { Toast, ThemeProvider, ToastProvider, useInputModality } from '@librechat/client';
 import { ScreenshotProvider, useApiErrorBoundary } from './hooks';
 import WakeLockManager from '~/components/System/WakeLockManager';
+import AppUpdatePrompt from '~/components/System/AppUpdatePrompt';
 import QueryDevtoolsGate from '~/components/QueryDevtoolsGate';
 import LanguageSync from '~/components/System/LanguageSync';
 import { getThemeFromEnv } from './utils/getThemeFromEnv';
@@ -66,6 +67,7 @@ const App = () => {
                 <DndProvider backend={HTML5Backend}>
                   <RouterProvider router={router} />
                   <WakeLockManager />
+                  <AppUpdatePrompt />
                   <QueryDevtoolsGate />
                   <Toast />
                   <RadixToast.Viewport className="pointer-events-none fixed inset-0 z-[1000] mx-auto my-2 flex max-w-[560px] flex-col items-stretch justify-start md:pb-5" />

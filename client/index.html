@@ -140,13 +140,17 @@
           return true;
         };
         if (navigator.serviceWorker) {
+          var hadServiceWorkerController = !!navigator.serviceWorker.controller;
           navigator.serviceWorker.addEventListener('message', function (event) {
             if (!event.data || event.data.type !== 'LC_SW_PING') {
               return;
             }
             var source = event.source || navigator.serviceWorker.controller;
             if (source) {
-              source.postMessage({ type: 'LC_SW_PONG' });
+              source.postMessage({
+                type: 'LC_SW_PONG',
+                hadController: hadServiceWorkerController,
+              });
             }
           });
         }

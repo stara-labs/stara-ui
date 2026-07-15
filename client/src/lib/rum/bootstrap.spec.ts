@@ -3,6 +3,7 @@ import { installRumBootstrap } from './bootstrap';
 type BootstrapTestWindow = {
   __lcRumPush?: unknown;
   __lcRumQueue?: unknown;
+  __lcUpdateAvailable?: boolean;
 };
 
 function bootstrapWindow(): BootstrapTestWindow {
@@ -14,6 +15,7 @@ describe('rum bootstrap', () => {
     sessionStorage.clear();
     bootstrapWindow().__lcRumQueue = undefined;
     bootstrapWindow().__lcRumPush = undefined;
+    bootstrapWindow().__lcUpdateAvailable = undefined;
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,
       value: undefined,
@@ -93,5 +95,30 @@ describe('rum bootstrap', () => {
     expect(window.__lcRumQueue?.map((event) => event.type)).toEqual(
       expect.arrayContaining(['sw-ping', 'sw-pong']),
     );
+  });
+
+  it('announces an activated update to the application', () => {
+    let messageHandler: ((event: MessageEvent) => void) | undefined;
+    const updateListener = jest.fn();
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        addEventListener: jest.fn((eventName, handler) => {
+          if (eventName === 'message') {
+            messageHandler = handler;
+          }
+        }),
+        controller: {},
+        getRegistrations: jest.fn(() => Promise.resolve([])),
+      },
+    });
+    window.addEventListener('lc-sw-update-ready', updateListener, { once: true });
+
+    installRumBootstrap(window);
+    messageHandler?.({ data: { type: 'LC_SW_UPDATE_READY' } } as MessageEvent);
+
+    expect(bootstrapWindow().__lcUpdateAvailable).toBe(true);
+    expect(updateListener).toHaveBeenCalledTimes(1);
+    expect(window.__lcRumQueue?.map((event) => event.type)).toContain('sw-update-ready');
   });
 });
