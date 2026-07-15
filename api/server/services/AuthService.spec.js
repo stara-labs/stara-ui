@@ -101,8 +101,6 @@ jest.mock('~/strategies/validators', () => ({
 jest.mock('~/server/services/Config', () => ({ getAppConfig: mockGetAppConfig }));
 jest.mock('~/server/utils', () => ({ sendEmail: mockSendEmail }));
 
-jest.resetModules();
-
 const checkEmailConfig = mockCheckEmailConfig;
 const shouldUseSecureCookie = mockShouldUseSecureCookie;
 const isEmailDomainAllowed = mockIsEmailDomainAllowed;
@@ -127,10 +125,6 @@ const deleteTokens = mockDeleteTokens;
 const getAppConfig = mockGetAppConfig;
 const sendEmail = mockSendEmail;
 const bcrypt = require('bcryptjs');
-let authService;
-jest.isolateModules(() => {
-  authService = require('./AuthService');
-});
 const {
   setOpenIDAuthTokens,
   requestPasswordReset,
@@ -140,7 +134,7 @@ const {
   setAuthTokens,
   setCloudFrontAuthCookies,
   verifyEmail,
-} = authService;
+} = require('./AuthService');
 
 /** Helper to build a mock Express response */
 function mockResponse() {
