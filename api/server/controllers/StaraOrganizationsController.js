@@ -256,9 +256,15 @@ const createOrganizationController = async (req, res) => {
       return res.status(400).json({ message: 'Org name must be at least 2 characters' });
     }
     const user = requireStaraUser(req.user);
+    const businessProfile = req.body?.business_profile;
+    const hasBusinessProfile =
+      businessProfile && typeof businessProfile === 'object' && !Array.isArray(businessProfile);
     const created = await callStaraApi(user, '/v1/orgs', {
       method: 'POST',
-      body: { name },
+      body: {
+        name,
+        ...(hasBusinessProfile ? { business_profile: businessProfile } : {}),
+      },
     });
     const tenantId = created.org.tenant_id;
     await callStaraApi(user, `/v1/orgs/${encodeURIComponent(tenantId)}/activate`, {

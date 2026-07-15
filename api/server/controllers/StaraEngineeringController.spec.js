@@ -15,6 +15,7 @@ const {
   createEngineeringTaskController,
   decideEngineeringRunController,
   getEngineeringContextController,
+  updateBusinessProfileController,
 } = require('./StaraEngineeringController');
 
 const originalStaraApiUrl = process.env.STARA_API_URL;
@@ -32,6 +33,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
     mockFetchJson({ repositories: [repository()] });
     mockFetchJson({ tasks: [taskAggregate()] });
     mockFetchJson({ approvals: [approval()] });
+    mockFetchJson({ business_profile: businessProfile() });
     mockFetchJson({ policy_config: policyConfig() });
     mockFetchJson({ readiness: readiness() });
     const res = makeRes();
@@ -57,10 +59,12 @@ describe('StaraEngineeringController canonical API proxy', () => {
         can_connect_repository: true,
         can_create_task: true,
         can_decide_approval: true,
+        can_update_business_profile: true,
       },
       repositories: [{ repository_name: 'stara-ui' }],
       tasks: [{ task: { title: 'Improve Stara' } }],
       approvals: [{ target: 'merge' }],
+      business_profile: { business_summary: 'Stara builds governed software delivery.' },
     });
   });
 
@@ -78,6 +82,24 @@ describe('StaraEngineeringController canonical API proxy', () => {
         tasks: [],
         approvals: [],
       }),
+    );
+  });
+
+  it('keeps the workspace available while an older API has no business-profile route', async () => {
+    mockFetchJson(activeOrganizations());
+    mockFetchJson({ repositories: [repository()] });
+    mockFetchJson({ tasks: [taskAggregate()] });
+    mockFetchJson({ approvals: [] });
+    mockFetchJson({ error: 'not_found' }, 404);
+    mockFetchJson({ policy_config: policyConfig() });
+    mockFetchJson({ readiness: readiness() });
+    const res = makeRes();
+
+    await getEngineeringContextController(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ business_profile: null, repositories: [repository()] }),
     );
   });
 
@@ -136,6 +158,33 @@ describe('StaraEngineeringController canonical API proxy', () => {
       2,
       `http://stara-api:3081/v1/engineering/runs/${run().id}/decisions`,
       expect.objectContaining({ method: 'POST', body: JSON.stringify(body) }),
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('updates business context for the server-resolved active organization', async () => {
+    mockFetchJson(activeOrganizations());
+    mockFetchJson({ business_profile: businessProfile() });
+    const res = makeRes();
+    const body = {
+      business_summary: 'Stara builds governed software delivery.',
+      primary_outcomes: ['Ship safe improvements'],
+      critical_workflows: ['Task to deployment'],
+      operating_constraints: ['Keep the active release available'],
+    };
+
+    await updateBusinessProfileController(makeReq({ body }), res);
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      'http://stara-api:3081/v1/orgs/11111111-1111-4111-8111-111111111111/business-profile',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify(body),
+        headers: expect.objectContaining({
+          'x-stara-tenant-id': '11111111-1111-4111-8111-111111111111',
+        }),
+      }),
     );
     expect(res.status).toHaveBeenCalledWith(200);
   });
@@ -231,6 +280,18 @@ function policyConfig() {
     tenant_id: activeOrganizations().active_tenant_id,
     template_key: 'regulated_default',
     engineering_delivery: { merge_approval_required: true },
+  };
+}
+
+function businessProfile() {
+  return {
+    tenant_id: activeOrganizations().active_tenant_id,
+    business_summary: 'Stara builds governed software delivery.',
+    primary_outcomes: ['Ship safe improvements'],
+    critical_workflows: ['Task to deployment'],
+    operating_constraints: ['Keep the active release available'],
+    updated_by_user_id: '22222222-2222-4222-8222-222222222222',
+    updated_at: '2026-07-15T00:00:00.000Z',
   };
 }
 

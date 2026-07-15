@@ -123,11 +123,31 @@ describe('StaraOnboardingView', () => {
     fireEvent.change(screen.getByLabelText('Organization name'), {
       target: { value: 'Acme Health' },
     });
+    fireEvent.change(screen.getByLabelText('Business summary'), {
+      target: { value: 'Acme coordinates regulated health operations.' },
+    });
+    fireEvent.change(screen.getByLabelText('Primary outcomes'), {
+      target: { value: 'Reduce onboarding time\nPreserve audit evidence' },
+    });
+    fireEvent.change(screen.getByLabelText('Critical workflows'), {
+      target: { value: 'Customer onboarding\nGoverned production delivery' },
+    });
+    fireEvent.change(screen.getByLabelText('Operating constraints'), {
+      target: { value: 'PHI stays on approved secure routes' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /Workflows and delivery/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Create organization' }));
 
     await waitFor(() =>
-      expect(mockCreateOrganization).toHaveBeenCalledWith({ name: 'Acme Health' }),
+      expect(mockCreateOrganization).toHaveBeenCalledWith({
+        name: 'Acme Health',
+        business_profile: {
+          business_summary: 'Acme coordinates regulated health operations.',
+          primary_outcomes: ['Reduce onboarding time', 'Preserve audit evidence'],
+          critical_workflows: ['Customer onboarding', 'Governed production delivery'],
+          operating_constraints: ['PHI stays on approved secure routes'],
+        },
+      }),
     );
     expect(mockSaveOnboarding).toHaveBeenCalledWith(
       expect.objectContaining({

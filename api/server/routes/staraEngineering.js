@@ -10,6 +10,7 @@ const {
   resumeEngineeringRunController,
   retryEngineeringRunController,
   startEngineeringRunController,
+  updateBusinessProfileController,
   updateEngineeringPolicyController,
 } = require('~/server/controllers/StaraEngineeringController');
 
@@ -19,6 +20,7 @@ router.use(requireJwtAuth, requireStaraAssurance);
 
 router.get('/context', getEngineeringContextController);
 router.post('/repositories', createRepositoryConnectionController);
+router.put('/business-profile', updateBusinessProfileController);
 router.put('/policy', updateEngineeringPolicyController);
 router.post('/tasks', createEngineeringTaskController);
 router.post('/tasks/:taskId/runs', startEngineeringRunController);

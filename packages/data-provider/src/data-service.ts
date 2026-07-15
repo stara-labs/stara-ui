@@ -193,6 +193,12 @@ export function updateStaraEngineeringPolicy(
   return request.put(endpoints.staraEngineeringPolicy(), payload);
 }
 
+export function updateStaraBusinessProfile(
+  payload: t.TUpdateStaraBusinessProfileRequest,
+): Promise<t.TStaraBusinessProfile> {
+  return request.put(endpoints.staraEngineeringBusinessProfile(), payload);
+}
+
 export function createStaraEngineeringTask(
   payload: t.TCreateStaraEngineeringTaskRequest,
 ): Promise<t.TStaraEngineeringTaskAggregate> {

@@ -130,6 +130,7 @@ export enum MutationKeys {
   updateStaraOrganizationTeam = 'updateStaraOrganizationTeam',
   deleteStaraOrganizationTeam = 'deleteStaraOrganizationTeam',
   createStaraEngineeringRepository = 'createStaraEngineeringRepository',
+  updateStaraBusinessProfile = 'updateStaraBusinessProfile',
   updateStaraEngineeringPolicy = 'updateStaraEngineeringPolicy',
   createStaraEngineeringTask = 'createStaraEngineeringTask',
   startStaraEngineeringRun = 'startStaraEngineeringRun',

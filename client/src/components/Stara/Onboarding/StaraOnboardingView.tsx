@@ -52,6 +52,13 @@ type ChoiceState = {
   orgName?: string;
 };
 
+type BusinessProfileDraft = {
+  businessSummary: string;
+  primaryOutcomes: string;
+  criticalWorkflows: string;
+  operatingConstraints: string;
+};
+
 type Option = {
   id: string;
   title: string;
@@ -173,6 +180,12 @@ const getReadinessScore = (choices: ChoiceState, context?: TStaraOnboardingConte
   return Math.min(100, score);
 };
 
+const linesFrom = (value: string) =>
+  value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
 export default function StaraOnboardingView() {
   const localize = useLocalize();
   useDocumentTitle(localize('com_ui_stara_onboarding_document_title'));
@@ -188,6 +201,12 @@ export default function StaraOnboardingView() {
 
   const [phase, setPhase] = useState<Phase>('intent');
   const [choices, setChoices] = useState<ChoiceState>({});
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfileDraft>({
+    businessSummary: '',
+    primaryOutcomes: '',
+    criticalWorkflows: '',
+    operatingConstraints: '',
+  });
   const [latestContext, setLatestContext] = useState<TStaraOnboardingContext | null>(null);
   const [completedStart, setCompletedStart] = useState<RecommendedStart>('chat');
   const initialized = useRef(false);
@@ -289,16 +308,33 @@ export default function StaraOnboardingView() {
 
   const createBusinessOrganization = async () => {
     const orgName = choices.orgName?.trim();
-    if (!orgName || !choices.setupPriority) {
+    const primaryOutcomes = linesFrom(businessProfile.primaryOutcomes);
+    const criticalWorkflows = linesFrom(businessProfile.criticalWorkflows);
+    if (
+      !orgName ||
+      !choices.setupPriority ||
+      !businessProfile.businessSummary.trim() ||
+      primaryOutcomes.length === 0 ||
+      criticalWorkflows.length === 0
+    ) {
       showToast({
-        message: 'Organization name and delivery focus are required.',
+        message:
+          'Organization, business context, outcomes, workflows, and delivery focus are required.',
         status: 'error',
       });
       return;
     }
 
     try {
-      await createOrganizationMutation.mutateAsync({ name: orgName });
+      await createOrganizationMutation.mutateAsync({
+        name: orgName,
+        business_profile: {
+          business_summary: businessProfile.businessSummary.trim(),
+          primary_outcomes: primaryOutcomes,
+          critical_workflows: criticalWorkflows,
+          operating_constraints: linesFrom(businessProfile.operatingConstraints),
+        },
+      });
       await finishAccount('business_setup', 'settings', {
         orgName,
         setupPriority: choices.setupPriority,
@@ -474,7 +510,14 @@ export default function StaraOnboardingView() {
                     <StepActions
                       back={() => setPhase('businessPath')}
                       nextLabel="Create organization"
-                      nextDisabled={!choices.orgName?.trim() || !choices.setupPriority || isBusy}
+                      nextDisabled={
+                        !choices.orgName?.trim() ||
+                        !choices.setupPriority ||
+                        !businessProfile.businessSummary.trim() ||
+                        linesFrom(businessProfile.primaryOutcomes).length === 0 ||
+                        linesFrom(businessProfile.criticalWorkflows).length === 0 ||
+                        isBusy
+                      }
                       busy={isBusy}
                       next={createBusinessOrganization}
                     />
@@ -490,6 +533,60 @@ export default function StaraOnboardingView() {
                           setChoices((prev) => ({ ...prev, orgName: event.target.value }))
                         }
                         autoComplete="organization"
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-medium text-text-primary">
+                      Business summary
+                      <textarea
+                        className="min-h-24 resize-y border border-border-light bg-surface-primary px-3 py-2 text-sm leading-6 outline-none focus:border-border-medium"
+                        value={businessProfile.businessSummary}
+                        onChange={(event) =>
+                          setBusinessProfile((current) => ({
+                            ...current,
+                            businessSummary: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="grid gap-1.5 text-sm font-medium text-text-primary">
+                        Primary outcomes
+                        <textarea
+                          className="min-h-28 resize-y border border-border-light bg-surface-primary px-3 py-2 text-sm leading-6 outline-none focus:border-border-medium"
+                          value={businessProfile.primaryOutcomes}
+                          onChange={(event) =>
+                            setBusinessProfile((current) => ({
+                              ...current,
+                              primaryOutcomes: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm font-medium text-text-primary">
+                        Critical workflows
+                        <textarea
+                          className="min-h-28 resize-y border border-border-light bg-surface-primary px-3 py-2 text-sm leading-6 outline-none focus:border-border-medium"
+                          value={businessProfile.criticalWorkflows}
+                          onChange={(event) =>
+                            setBusinessProfile((current) => ({
+                              ...current,
+                              criticalWorkflows: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                    <label className="grid gap-1.5 text-sm font-medium text-text-primary">
+                      Operating constraints
+                      <textarea
+                        className="min-h-20 resize-y border border-border-light bg-surface-primary px-3 py-2 text-sm leading-6 outline-none focus:border-border-medium"
+                        value={businessProfile.operatingConstraints}
+                        onChange={(event) =>
+                          setBusinessProfile((current) => ({
+                            ...current,
+                            operatingConstraints: event.target.value,
+                          }))
+                        }
                       />
                     </label>
                     <div>
