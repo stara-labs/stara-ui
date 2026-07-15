@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import type {
+  StaraEngineeringApproverRoleKey,
   StaraEngineeringRiskClass,
   StaraEngineeringTargetEnvironment,
   TCreateStaraEngineeringRepositoryRequest,
@@ -38,6 +39,7 @@ import {
   useStaraEngineeringContextQuery,
   useStaraEngineeringRunQuery,
   useStartStaraEngineeringRunMutation,
+  useUpdateStaraBusinessProfileMutation,
   useUpdateStaraEngineeringPolicyMutation,
 } from '~/data-provider';
 import { cn } from '~/utils';
@@ -46,6 +48,11 @@ export type StaraEngineeringView = 'workflows' | 'approvals' | 'activity' | 'set
 
 const terminalRunStatuses = new Set(['completed', 'cancelled', 'failed', 'rolled_back']);
 const retryableRunStatuses = new Set(['cancelled', 'failed', 'rolled_back']);
+const linesFrom = (value: string) =>
+  value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 
 export default function StaraEngineeringWorkspace({ view }: { view: StaraEngineeringView }) {
   const query = useStaraEngineeringContextQuery();
@@ -807,6 +814,15 @@ function EngineeringSettings({ context }: { context: TStaraEngineeringContext })
       <WorkspaceSummary context={context} />
       <section className="grid gap-4 border-b border-border-light pb-6 xl:grid-cols-[18rem_minmax(0,1fr)]">
         <div>
+          <h2 className="text-base font-semibold text-text-primary">Business context</h2>
+          <p className="mt-1 text-sm leading-6 text-text-secondary">
+            Shared outcomes and workflows guide task planning and readiness.
+          </p>
+        </div>
+        <BusinessProfileForm context={context} />
+      </section>
+      <section className="grid gap-4 border-b border-border-light pb-6 xl:grid-cols-[18rem_minmax(0,1fr)]">
+        <div>
           <h2 className="text-base font-semibold text-text-primary">Repository access</h2>
           <p className="mt-1 text-sm leading-6 text-text-secondary">
             GitHub App installation tokens are minted inside the isolated executor. They are never
@@ -836,6 +852,92 @@ function EngineeringSettings({ context }: { context: TStaraEngineeringContext })
         </div>
         <ReadinessList context={context} />
       </section>
+    </div>
+  );
+}
+
+function BusinessProfileForm({ context }: { context: TStaraEngineeringContext }) {
+  const { showToast } = useToastContext();
+  const [businessSummary, setBusinessSummary] = useState('');
+  const [primaryOutcomes, setPrimaryOutcomes] = useState('');
+  const [criticalWorkflows, setCriticalWorkflows] = useState('');
+  const [operatingConstraints, setOperatingConstraints] = useState('');
+  const mutation = useUpdateStaraBusinessProfileMutation();
+  const loadedProfileVersion = useRef<string | null>(null);
+
+  useEffect(() => {
+    const profileVersion = context.business_profile?.updated_at ?? 'missing';
+    if (loadedProfileVersion.current === profileVersion) {
+      return;
+    }
+    loadedProfileVersion.current = profileVersion;
+    setBusinessSummary(context.business_profile?.business_summary ?? '');
+    setPrimaryOutcomes((context.business_profile?.primary_outcomes ?? []).join('\n'));
+    setCriticalWorkflows((context.business_profile?.critical_workflows ?? []).join('\n'));
+    setOperatingConstraints((context.business_profile?.operating_constraints ?? []).join('\n'));
+  }, [context.business_profile]);
+
+  const primaryOutcomeLines = linesFrom(primaryOutcomes);
+  const criticalWorkflowLines = linesFrom(criticalWorkflows);
+  const canSave =
+    context.permissions.can_update_business_profile &&
+    businessSummary.trim().length > 0 &&
+    primaryOutcomeLines.length > 0 &&
+    criticalWorkflowLines.length > 0 &&
+    !mutation.isLoading;
+
+  const save = async () => {
+    try {
+      await mutation.mutateAsync({
+        business_summary: businessSummary.trim(),
+        primary_outcomes: primaryOutcomeLines,
+        critical_workflows: criticalWorkflowLines,
+        operating_constraints: linesFrom(operatingConstraints),
+      });
+      showToast({ message: 'Business context updated.', status: 'success' });
+    } catch (error) {
+      showToast({ message: errorMessage(error), status: 'error' });
+    }
+  };
+
+  return (
+    <div className="grid gap-4">
+      <Field label="Business summary">
+        <textarea
+          className="min-h-24"
+          value={businessSummary}
+          onChange={(event) => setBusinessSummary(event.target.value)}
+        />
+      </Field>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Primary outcomes" hint="One per line">
+          <textarea
+            className="min-h-28"
+            value={primaryOutcomes}
+            onChange={(event) => setPrimaryOutcomes(event.target.value)}
+          />
+        </Field>
+        <Field label="Critical workflows" hint="One per line">
+          <textarea
+            className="min-h-28"
+            value={criticalWorkflows}
+            onChange={(event) => setCriticalWorkflows(event.target.value)}
+          />
+        </Field>
+      </div>
+      <Field label="Operating constraints" hint="Optional, one per line">
+        <textarea
+          className="min-h-20"
+          value={operatingConstraints}
+          onChange={(event) => setOperatingConstraints(event.target.value)}
+        />
+      </Field>
+      <div className="flex justify-end">
+        <Button onClick={save} disabled={!canSave}>
+          {mutation.isLoading ? <Spinner className="mr-2 h-4 w-4" /> : null}
+          Save business context
+        </Button>
+      </div>
     </div>
   );
 }
@@ -992,6 +1094,12 @@ function PolicyForm({ context }: { context: TStaraEngineeringContext }) {
   const [deploymentApproval, setDeploymentApproval] = useState(
     delivery?.deployment_approval_required ?? true,
   );
+  const [mergeApproverRoles, setMergeApproverRoles] = useState<StaraEngineeringApproverRoleKey[]>(
+    delivery?.merge_approver_role_keys ?? ['owner', 'admin'],
+  );
+  const [deploymentApproverRoles, setDeploymentApproverRoles] = useState<
+    StaraEngineeringApproverRoleKey[]
+  >(delivery?.deployment_approver_role_keys ?? ['owner', 'admin']);
   const [draftPullRequest, setDraftPullRequest] = useState(delivery?.pull_request_draft ?? true);
   const [maxRepairs, setMaxRepairs] = useState(delivery?.max_repair_attempts ?? 5);
   const [branchPrefix, setBranchPrefix] = useState(delivery?.branch_prefix ?? 'stara');
@@ -1007,6 +1115,8 @@ function PolicyForm({ context }: { context: TStaraEngineeringContext }) {
     loadedPolicyVersion.current = policyVersion;
     setMergeApproval(delivery.merge_approval_required);
     setDeploymentApproval(delivery.deployment_approval_required);
+    setMergeApproverRoles(delivery.merge_approver_role_keys ?? ['owner', 'admin']);
+    setDeploymentApproverRoles(delivery.deployment_approver_role_keys ?? ['owner', 'admin']);
     setDraftPullRequest(delivery.pull_request_draft);
     setMaxRepairs(delivery.max_repair_attempts);
     setBranchPrefix(delivery.branch_prefix);
@@ -1025,6 +1135,8 @@ function PolicyForm({ context }: { context: TStaraEngineeringContext }) {
           ...delivery,
           merge_approval_required: mergeApproval,
           deployment_approval_required: deploymentApproval,
+          merge_approver_role_keys: mergeApproverRoles,
+          deployment_approver_role_keys: deploymentApproverRoles,
           pull_request_draft: draftPullRequest,
           max_repair_attempts: maxRepairs,
           branch_prefix: branchPrefix.trim(),
@@ -1053,6 +1165,18 @@ function PolicyForm({ context }: { context: TStaraEngineeringContext }) {
           label="Open pull requests as draft"
           checked={draftPullRequest}
           onChange={setDraftPullRequest}
+        />
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <ApproverRoleSelector
+          label="Merge approvers"
+          selected={mergeApproverRoles}
+          onChange={setMergeApproverRoles}
+        />
+        <ApproverRoleSelector
+          label="Deployment approvers"
+          selected={deploymentApproverRoles}
+          onChange={setDeploymentApproverRoles}
         />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -1086,6 +1210,51 @@ function PolicyForm({ context }: { context: TStaraEngineeringContext }) {
         </Button>
       </div>
     </div>
+  );
+}
+
+function ApproverRoleSelector({
+  label,
+  selected,
+  onChange,
+}: {
+  label: string;
+  selected: StaraEngineeringApproverRoleKey[];
+  onChange: (roles: StaraEngineeringApproverRoleKey[]) => void;
+}) {
+  const toggle = (role: StaraEngineeringApproverRoleKey, checked: boolean) => {
+    if (checked) {
+      onChange([...new Set([...selected, role])]);
+      return;
+    }
+    if (selected.length > 1) {
+      onChange(selected.filter((candidate) => candidate !== role));
+    }
+  };
+
+  return (
+    <fieldset className="grid gap-2 border border-border-light p-3">
+      <legend className="px-1 text-sm font-medium text-text-primary">{label}</legend>
+      <div className="grid grid-cols-2 gap-2">
+        {(['owner', 'admin'] as const).map((role) => {
+          const checked = selected.includes(role);
+          return (
+            <label
+              key={role}
+              className="flex min-h-10 items-center gap-2 text-sm capitalize text-text-primary"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={checked && selected.length === 1}
+                onChange={(event) => toggle(role, event.target.checked)}
+              />
+              {role}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 

@@ -75,12 +75,24 @@ describe('StaraOrganizationsController canonical API proxy', () => {
     mockContext();
     const res = makeRes();
 
-    await createOrganizationController(makeReq({ body: { name: 'Acme Health' } }), res);
+    const businessProfile = {
+      business_summary: 'Acme coordinates regulated health operations.',
+      primary_outcomes: ['Reduce onboarding time'],
+      critical_workflows: ['Customer onboarding'],
+      operating_constraints: [],
+    };
+    await createOrganizationController(
+      makeReq({ body: { name: 'Acme Health', business_profile: businessProfile } }),
+      res,
+    );
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
       'http://stara-api:3081/v1/orgs',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'Acme Health' }) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: 'Acme Health', business_profile: businessProfile }),
+      }),
     );
     expect(fetch).toHaveBeenNthCalledWith(
       2,

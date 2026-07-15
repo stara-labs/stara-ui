@@ -58,6 +58,20 @@ const callForActiveTenant = (context, path, options = {}) =>
     tenantId: context.activeTenantId,
   });
 
+const loadBusinessProfile = async (context) => {
+  try {
+    return await callForActiveTenant(
+      context,
+      `/v1/orgs/${encodeURIComponent(context.activeTenantId)}/business-profile`,
+    );
+  } catch (error) {
+    if (error.status === 404) {
+      return { business_profile: null };
+    }
+    throw error;
+  }
+};
+
 const getEngineeringContextController = async (req, res) => {
   try {
     const context = await activeEngineeringContext(req.user);
@@ -71,29 +85,38 @@ const getEngineeringContextController = async (req, res) => {
           can_create_task: false,
           can_decide_approval: false,
           can_update_policy: false,
+          can_update_business_profile: false,
         },
         repositories: [],
         tasks: [],
         approvals: [],
+        business_profile: null,
         policy_config: null,
         readiness: null,
       });
     }
 
-    const [repositoryResponse, taskResponse, approvalResponse, policyResponse, readinessResponse] =
-      await Promise.all([
-        callForActiveTenant(context, '/v1/engineering/repositories'),
-        callForActiveTenant(context, '/v1/engineering/tasks'),
-        callForActiveTenant(context, '/v1/engineering/approvals'),
-        callForActiveTenant(
-          context,
-          `/v1/orgs/${encodeURIComponent(context.activeTenantId)}/policy-config`,
-        ),
-        callForActiveTenant(
-          context,
-          `/v1/orgs/${encodeURIComponent(context.activeTenantId)}/readiness`,
-        ),
-      ]);
+    const [
+      repositoryResponse,
+      taskResponse,
+      approvalResponse,
+      profileResponse,
+      policyResponse,
+      readinessResponse,
+    ] = await Promise.all([
+      callForActiveTenant(context, '/v1/engineering/repositories'),
+      callForActiveTenant(context, '/v1/engineering/tasks'),
+      callForActiveTenant(context, '/v1/engineering/approvals'),
+      loadBusinessProfile(context),
+      callForActiveTenant(
+        context,
+        `/v1/orgs/${encodeURIComponent(context.activeTenantId)}/policy-config`,
+      ),
+      callForActiveTenant(
+        context,
+        `/v1/orgs/${encodeURIComponent(context.activeTenantId)}/readiness`,
+      ),
+    ]);
     const roleKey = safeString(context.activeEntry.membership?.role_key);
 
     return res.status(200).json({
@@ -105,10 +128,12 @@ const getEngineeringContextController = async (req, res) => {
         can_create_task: TASK_ROLES.has(roleKey),
         can_decide_approval: MANAGER_ROLES.has(roleKey),
         can_update_policy: MANAGER_ROLES.has(roleKey),
+        can_update_business_profile: MANAGER_ROLES.has(roleKey),
       },
       repositories: repositoryResponse.repositories ?? [],
       tasks: taskResponse.tasks ?? [],
       approvals: approvalResponse.approvals ?? [],
+      business_profile: profileResponse.business_profile ?? null,
       policy_config: policyResponse.policy_config ?? null,
       readiness: readinessResponse.readiness ?? null,
     });
@@ -141,6 +166,20 @@ const updateEngineeringPolicyController = async (req, res) => {
     return res.status(200).json(result.policy_config ?? null);
   } catch (error) {
     return respondWithError(res, 'Failed to update engineering policy', error);
+  }
+};
+
+const updateBusinessProfileController = async (req, res) => {
+  try {
+    const context = await requireActiveEngineeringContext(req.user);
+    const result = await callForActiveTenant(
+      context,
+      `/v1/orgs/${encodeURIComponent(context.activeTenantId)}/business-profile`,
+      { method: 'PUT', body: req.body },
+    );
+    return res.status(200).json(result.business_profile ?? null);
+  } catch (error) {
+    return respondWithError(res, 'Failed to update business profile', error);
   }
 };
 
@@ -228,5 +267,6 @@ module.exports = {
   resumeEngineeringRunController,
   retryEngineeringRunController,
   startEngineeringRunController,
+  updateBusinessProfileController,
   updateEngineeringPolicyController,
 };

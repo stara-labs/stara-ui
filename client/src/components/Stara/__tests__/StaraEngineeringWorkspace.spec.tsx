@@ -1,6 +1,6 @@
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { TStaraEngineeringContext } from 'librechat-data-provider';
 import StaraEngineeringWorkspace from '../StaraEngineeringWorkspace';
 
@@ -10,6 +10,8 @@ const mockRunQuery = jest.fn();
 const mockCreateTask = jest.fn();
 const mockStartRun = jest.fn();
 const mockDecideRun = jest.fn();
+const mockUpdateBusinessProfile = jest.fn();
+const mockUpdatePolicy = jest.fn();
 
 const idleMutation = () => ({ isLoading: false, mutateAsync: jest.fn() });
 
@@ -49,7 +51,14 @@ jest.mock('~/data-provider', () => ({
   useRetryStaraEngineeringRunMutation: idleMutation,
   useResumeStaraEngineeringRunMutation: idleMutation,
   useCreateStaraEngineeringRepositoryMutation: idleMutation,
-  useUpdateStaraEngineeringPolicyMutation: idleMutation,
+  useUpdateStaraBusinessProfileMutation: () => ({
+    isLoading: false,
+    mutateAsync: mockUpdateBusinessProfile,
+  }),
+  useUpdateStaraEngineeringPolicyMutation: () => ({
+    isLoading: false,
+    mutateAsync: mockUpdatePolicy,
+  }),
 }));
 
 const repository = {
@@ -143,10 +152,12 @@ function context(overrides: Partial<TStaraEngineeringContext> = {}): TStaraEngin
       can_create_task: true,
       can_decide_approval: true,
       can_update_policy: true,
+      can_update_business_profile: true,
     },
     repositories: [repository],
     tasks: [{ task, repositories: [], latest_run: run }],
     approvals: [],
+    business_profile: null,
     policy_config: null,
     readiness: null,
     ...overrides,
@@ -180,6 +191,8 @@ beforeEach(() => {
   });
   mockStartRun.mockResolvedValue({ run, task, repositories: [], events: [] });
   mockDecideRun.mockResolvedValue({});
+  mockUpdateBusinessProfile.mockResolvedValue({});
+  mockUpdatePolicy.mockResolvedValue({});
 });
 
 describe('StaraEngineeringWorkspace', () => {
@@ -277,6 +290,86 @@ describe('StaraEngineeringWorkspace', () => {
         target: 'merge',
         decision: 'approved',
         expected_version: run.version,
+      },
+    });
+  });
+
+  it('updates canonical business context and immutable approver-role policy', async () => {
+    mockContextQuery.mockReturnValue({
+      data: context({
+        business_profile: {
+          tenant_id: 'tenant-1',
+          business_summary: 'Stara builds governed software delivery.',
+          primary_outcomes: ['Ship safe improvements'],
+          critical_workflows: ['Task to deployment'],
+          operating_constraints: ['Keep the active release available'],
+          updated_by_user_id: 'user-1',
+          updated_at: '2026-07-15T00:00:00.000Z',
+        },
+        policy_config: {
+          tenant_id: 'tenant-1',
+          template_key: 'regulated_default',
+          regulated_data_classes: ['pii', 'phi', 'financial', 'confidential'],
+          secure_inference_required: true,
+          frontier_projection_mode: 'deidentified_only',
+          missing_context_behavior: 'fail_closed',
+          review_required_for_unknown_sensitivity: true,
+          redacted_observations_required: true,
+          engineering_delivery: {
+            review_required: true,
+            merge_approval_required: true,
+            deployment_approval_required: true,
+            merge_approver_role_keys: ['owner', 'admin'],
+            deployment_approver_role_keys: ['owner', 'admin'],
+            required_ci_check_names: ['test'],
+            max_repair_attempts: 5,
+            max_immediate_steps: 25,
+            branch_prefix: 'stara',
+            pull_request_draft: true,
+            coding_model: 'gpt-5.4',
+            coding_grant_ttl_seconds: 3600,
+            coding_max_requests: 100,
+            coding_max_request_bytes: 2097152,
+            coding_max_input_tokens: 1000000,
+            coding_max_output_tokens: 500000,
+            coding_max_output_tokens_per_request: 64000,
+          },
+          updated_by_user_id: 'user-1',
+          updated_at: '2026-07-15T00:00:00.000Z',
+        },
+      }),
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+
+    renderWorkspace('settings');
+
+    fireEvent.change(screen.getByLabelText('Business summary'), {
+      target: { value: 'Stara safely improves its own control plane.' },
+    });
+    fireEvent.change(screen.getByLabelText(/Primary outcomes/), {
+      target: { value: 'Ship safe improvements\nKeep service available' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save business context' }));
+
+    await waitFor(() => expect(mockUpdateBusinessProfile).toHaveBeenCalledTimes(1));
+    expect(mockUpdateBusinessProfile).toHaveBeenCalledWith({
+      business_summary: 'Stara safely improves its own control plane.',
+      primary_outcomes: ['Ship safe improvements', 'Keep service available'],
+      critical_workflows: ['Task to deployment'],
+      operating_constraints: ['Keep the active release available'],
+    });
+
+    const mergeApprovers = screen.getByRole('group', { name: 'Merge approvers' });
+    fireEvent.click(within(mergeApprovers).getByRole('checkbox', { name: 'owner' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save policy' }));
+
+    await waitFor(() => expect(mockUpdatePolicy).toHaveBeenCalledTimes(1));
+    expect(mockUpdatePolicy.mock.calls[0][0]).toMatchObject({
+      engineering_delivery: {
+        merge_approver_role_keys: ['admin'],
+        deployment_approver_role_keys: ['owner', 'admin'],
       },
     });
   });

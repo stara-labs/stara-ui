@@ -224,6 +224,21 @@ export type StaraOnboardingMode =
 
 export type StaraTenantMembershipStatus = 'active' | 'invited' | 'disabled';
 export type StaraOrgRoleKey = 'owner' | 'admin' | 'member' | 'viewer';
+export type StaraEngineeringApproverRoleKey = 'owner' | 'admin';
+
+export type TStaraBusinessProfileInput = {
+  business_summary: string;
+  primary_outcomes: string[];
+  critical_workflows: string[];
+  operating_constraints?: string[];
+};
+
+export type TStaraBusinessProfile = TStaraBusinessProfileInput & {
+  tenant_id: string;
+  operating_constraints: string[];
+  updated_by_user_id: string;
+  updated_at: string;
+};
 
 export type TStaraOnboardingRecord = {
   completedAt?: string | Date;
@@ -359,6 +374,7 @@ export type TStaraOrganizationsContext = {
 
 export type TCreateStaraOrgRequest = {
   name: string;
+  business_profile?: TStaraBusinessProfileInput;
 };
 
 export type TUpdateStaraOrgMemberRequest = {
@@ -569,6 +585,8 @@ export type TStaraEngineeringDeliveryPolicy = {
   review_required: boolean;
   merge_approval_required: boolean;
   deployment_approval_required: boolean;
+  merge_approver_role_keys: StaraEngineeringApproverRoleKey[];
+  deployment_approver_role_keys: StaraEngineeringApproverRoleKey[];
   required_ci_check_names: string[];
   max_repair_attempts: number;
   max_immediate_steps: number;
@@ -613,10 +631,12 @@ export type TStaraEngineeringContext = {
     can_create_task: boolean;
     can_decide_approval: boolean;
     can_update_policy: boolean;
+    can_update_business_profile: boolean;
   };
   repositories: TStaraEngineeringRepository[];
   tasks: TStaraEngineeringTaskAggregate[];
   approvals: TStaraEngineeringApproval[];
+  business_profile: TStaraBusinessProfile | null;
   policy_config: TStaraEngineeringPolicyConfig | null;
   readiness: TStaraEngineeringReadiness | null;
 };
@@ -666,6 +686,8 @@ export type TUpdateStaraEngineeringPolicyRequest = {
   template_key?: 'regulated_default' | 'regulated_strict' | 'custom';
   engineering_delivery?: Partial<TStaraEngineeringDeliveryPolicy>;
 };
+
+export type TUpdateStaraBusinessProfileRequest = TStaraBusinessProfileInput;
 
 export type TStaraAccessGroup = {
   id: string;

@@ -376,6 +376,29 @@ export const useUpdateStaraEngineeringPolicyMutation = (
   );
 };
 
+export const useUpdateStaraBusinessProfileMutation = (
+  options?: t.MutationOptions<t.TStaraBusinessProfile, t.TUpdateStaraBusinessProfileRequest>,
+): UseMutationResult<
+  t.TStaraBusinessProfile,
+  unknown,
+  t.TUpdateStaraBusinessProfileRequest,
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.updateStaraBusinessProfile],
+    (payload) => dataService.updateStaraBusinessProfile(payload),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        invalidateStaraEngineering(queryClient);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
 export const useCreateStaraEngineeringTaskMutation = (
   options?: t.MutationOptions<
     t.TStaraEngineeringTaskAggregate,
