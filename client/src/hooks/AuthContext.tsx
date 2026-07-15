@@ -371,7 +371,7 @@ const AuthContextProvider = ({
       }
 
       try {
-        const assurance = await getIdentityPlatformAssurance(firebaseUser);
+        const assurance = await getIdentityPlatformAssurance(firebaseUser, identityPlatform);
         if (!assurance.emailVerified) {
           identitySubjectRef.current = undefined;
           await resendIdentityPlatformEmailVerification(identityPlatform).catch(() => undefined);

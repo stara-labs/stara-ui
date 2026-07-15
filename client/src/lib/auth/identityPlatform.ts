@@ -263,17 +263,22 @@ export const confirmIdentityPlatformPasswordReset = async (
 
 export const getIdentityPlatformAssurance = async (
   user: User,
+  config: TIdentityPlatformStartupConfig,
 ): Promise<{ emailVerified: boolean; totpEnrolled: boolean; mfaSatisfied: boolean }> => {
   const { authModule } = await loadFirebaseModules();
   const factors = authModule.multiFactor(user).enrolledFactors;
   const token = await user.getIdTokenResult();
   const firebaseClaims = token.claims.firebase as { sign_in_second_factor?: unknown } | undefined;
+  // The local Auth emulator cannot issue TOTP-backed tokens. Keep its seeded
+  // assurance claim impossible to use unless this browser is explicitly on the emulator path.
+  const emulatorMfaSatisfied =
+    Boolean(config.emulatorUrl) && token.claims.stara_mfa_enrolled === true;
   return {
     emailVerified: user.emailVerified,
-    totpEnrolled: factors.some(
-      (factor) => factor.factorId === authModule.TotpMultiFactorGenerator.FACTOR_ID,
-    ),
-    mfaSatisfied: typeof firebaseClaims?.sign_in_second_factor === 'string',
+    totpEnrolled:
+      factors.some((factor) => factor.factorId === authModule.TotpMultiFactorGenerator.FACTOR_ID) ||
+      emulatorMfaSatisfied,
+    mfaSatisfied: typeof firebaseClaims?.sign_in_second_factor === 'string' || emulatorMfaSatisfied,
   };
 };
 

@@ -258,7 +258,7 @@ describe('Identity Platform browser adapter', () => {
     };
     mockMultiFactor.mockReturnValue(factors);
 
-    await expect(getIdentityPlatformAssurance(user as never)).resolves.toEqual({
+    await expect(getIdentityPlatformAssurance(user as never, config)).resolves.toEqual({
       emailVerified: true,
       totpEnrolled: true,
       mfaSatisfied: true,
@@ -285,6 +285,31 @@ describe('Identity Platform browser adapter', () => {
       'Authenticator app',
     );
     expect(mockSignOut).toHaveBeenCalledWith(auth);
+  });
+
+  it('accepts seeded MFA assurance only for the explicitly configured Auth emulator', async () => {
+    const user = {
+      uid: 'identity-local',
+      email: 'local@example.com',
+      emailVerified: true,
+      getIdTokenResult: jest.fn().mockResolvedValue({
+        claims: { stara_mfa_enrolled: true, firebase: {} },
+      }),
+    };
+    mockMultiFactor.mockReturnValue({ enrolledFactors: [] });
+
+    await expect(getIdentityPlatformAssurance(user as never, config)).resolves.toEqual({
+      emailVerified: true,
+      totpEnrolled: true,
+      mfaSatisfied: true,
+    });
+    await expect(
+      getIdentityPlatformAssurance(user as never, { ...config, emulatorUrl: undefined }),
+    ).resolves.toEqual({
+      emailVerified: true,
+      totpEnrolled: false,
+      mfaSatisfied: false,
+    });
   });
 
   it('removes the Firebase TOTP factor and signs out', async () => {
