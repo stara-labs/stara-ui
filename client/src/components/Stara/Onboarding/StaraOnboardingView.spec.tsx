@@ -2,7 +2,7 @@ import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { TStaraOnboardingContext } from 'librechat-data-provider';
-import StaraOnboardingView from './StaraOnboardingView';
+import StaraOnboardingView, { resolveCompletionRoute } from './StaraOnboardingView';
 
 const mockCreateOrganization = jest.fn();
 const mockSaveOnboarding = jest.fn();
@@ -111,6 +111,15 @@ beforeEach(() => {
 });
 
 describe('StaraOnboardingView', () => {
+  it('uses the recommended start instead of the generic login destination', () => {
+    expect(resolveCompletionRoute('/c/new', 'workflows')).toBe('/stara/workflows');
+    expect(resolveCompletionRoute(null, 'approvals')).toBe('/stara/approvals');
+  });
+
+  it('preserves an explicit safe deep link after onboarding', () => {
+    expect(resolveCompletionRoute('/stara/settings', 'workflows')).toBe('/stara/settings');
+  });
+
   it('creates the canonical organization and continues into its owner addendum', async () => {
     render(
       <MemoryRouter initialEntries={['/onboarding?redirect_to=%2Fstara%2Fsettings']}>

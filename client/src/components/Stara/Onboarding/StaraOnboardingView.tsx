@@ -145,6 +145,16 @@ const startLabels: Record<RecommendedStart, string> = {
   settings: 'settings',
 };
 
+export const resolveCompletionRoute = (
+  redirectTo: string | null,
+  completedStart: RecommendedStart,
+) => {
+  if (redirectTo && redirectTo !== startRoutes.chat) {
+    return redirectTo;
+  }
+  return startRoutes[completedStart];
+};
+
 const getRecommendedStart = (choice?: string): RecommendedStart => {
   if (
     choice === 'workflows' ||
@@ -352,7 +362,7 @@ export default function StaraOnboardingView() {
   };
 
   const continueAfterComplete = () => {
-    navigate(safeRedirectTo || startRoutes[completedStart] || '/c/new', { replace: true });
+    navigate(resolveCompletionRoute(safeRedirectTo, completedStart), { replace: true });
   };
 
   if (query.isLoading && !context) {
