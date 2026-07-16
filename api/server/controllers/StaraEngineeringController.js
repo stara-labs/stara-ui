@@ -155,6 +155,21 @@ const createRepositoryConnectionController = async (req, res) => {
   }
 };
 
+const updateRepositoryConnectionController = async (req, res) => {
+  try {
+    const context = await requireActiveEngineeringContext(req.user);
+    const repositoryId = requirePathId(req.params.repositoryId, 'Repository connection ID');
+    const result = await callForActiveTenant(
+      context,
+      `/v1/engineering/repositories/${repositoryId}`,
+      { method: 'PATCH', body: req.body },
+    );
+    return res.status(200).json(result);
+  } catch (error) {
+    return respondWithError(res, 'Failed to update repository configuration', error);
+  }
+};
+
 const updateEngineeringPolicyController = async (req, res) => {
   try {
     const context = await requireActiveEngineeringContext(req.user);
@@ -269,4 +284,5 @@ module.exports = {
   startEngineeringRunController,
   updateBusinessProfileController,
   updateEngineeringPolicyController,
+  updateRepositoryConnectionController,
 };

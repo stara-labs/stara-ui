@@ -104,17 +104,24 @@ run('npx', ['prettier', '--check', '--no-error-on-unmatched-pattern', '--', ...s
 run('node', ['scripts/sort-imports.mts', '--check', ...sourceFiles]);
 
 const touched = (pattern) => files.some((file) => pattern.test(file));
+const frontendTouched = touched(frontendPattern);
+const apiTouched = touched(/^api\//);
 
-if (touched(frontendPattern)) {
-  run('npm', ['--prefix', 'client', 'run', 'typecheck']);
+if (frontendTouched) {
   run('npm', ['run', 'frontend:ci']);
+  run('npm', ['--prefix', 'client', 'run', 'typecheck']);
 }
 
 if (touched(/^client\//)) {
   run('npm', ['run', 'test:client']);
 }
 
-if (touched(/^api\//)) {
+if (apiTouched) {
+  if (!frontendTouched) {
+    run('npm', ['run', 'build:data-provider']);
+  }
+  run('npm', ['run', 'build:data-schemas']);
+  run('npm', ['run', 'build:api']);
   run('npm', ['run', 'test:api']);
 }
 

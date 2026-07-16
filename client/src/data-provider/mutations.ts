@@ -350,6 +350,32 @@ export const useCreateStaraEngineeringRepositoryMutation = (
   );
 };
 
+export const useUpdateStaraEngineeringRepositoryMutation = (
+  options?: t.MutationOptions<
+    { repository: t.TStaraEngineeringRepository; action_version_id: string },
+    { repositoryId: string; payload: t.TUpdateStaraEngineeringRepositoryRequest }
+  >,
+): UseMutationResult<
+  { repository: t.TStaraEngineeringRepository; action_version_id: string },
+  unknown,
+  { repositoryId: string; payload: t.TUpdateStaraEngineeringRepositoryRequest },
+  unknown
+> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, ..._options } = options || {};
+  return useMutation(
+    [MutationKeys.updateStaraEngineeringRepository],
+    (variables) => dataService.updateStaraEngineeringRepository(variables),
+    {
+      ..._options,
+      onSuccess: (data, variables, context) => {
+        invalidateStaraEngineering(queryClient);
+        onSuccess?.(data, variables, context);
+      },
+    },
+  );
+};
+
 export const useUpdateStaraEngineeringPolicyMutation = (
   options?: t.MutationOptions<
     t.TStaraEngineeringPolicyConfig,

@@ -12,6 +12,7 @@ const {
   startEngineeringRunController,
   updateBusinessProfileController,
   updateEngineeringPolicyController,
+  updateRepositoryConnectionController,
 } = require('~/server/controllers/StaraEngineeringController');
 
 const router = express.Router();
@@ -20,6 +21,7 @@ router.use(requireJwtAuth, requireStaraAssurance);
 
 router.get('/context', getEngineeringContextController);
 router.post('/repositories', createRepositoryConnectionController);
+router.patch('/repositories/:repositoryId', updateRepositoryConnectionController);
 router.put('/business-profile', updateBusinessProfileController);
 router.put('/policy', updateEngineeringPolicyController);
 router.post('/tasks', createEngineeringTaskController);

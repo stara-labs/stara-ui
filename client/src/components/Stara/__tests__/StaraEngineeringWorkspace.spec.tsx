@@ -12,6 +12,7 @@ const mockStartRun = jest.fn();
 const mockDecideRun = jest.fn();
 const mockUpdateBusinessProfile = jest.fn();
 const mockUpdatePolicy = jest.fn();
+const mockUpdateRepository = jest.fn();
 
 const idleMutation = () => ({ isLoading: false, mutateAsync: jest.fn() });
 
@@ -51,6 +52,10 @@ jest.mock('~/data-provider', () => ({
   useRetryStaraEngineeringRunMutation: idleMutation,
   useResumeStaraEngineeringRunMutation: idleMutation,
   useCreateStaraEngineeringRepositoryMutation: idleMutation,
+  useUpdateStaraEngineeringRepositoryMutation: () => ({
+    isLoading: false,
+    mutateAsync: mockUpdateRepository,
+  }),
   useUpdateStaraBusinessProfileMutation: () => ({
     isLoading: false,
     mutateAsync: mockUpdateBusinessProfile,
@@ -193,6 +198,10 @@ beforeEach(() => {
   mockDecideRun.mockResolvedValue({});
   mockUpdateBusinessProfile.mockResolvedValue({});
   mockUpdatePolicy.mockResolvedValue({});
+  mockUpdateRepository.mockResolvedValue({
+    repository: { ...repository, version: 2 },
+    action_version_id: 'action-repository-update',
+  });
 });
 
 describe('StaraEngineeringWorkspace', () => {
@@ -370,6 +379,54 @@ describe('StaraEngineeringWorkspace', () => {
       engineering_delivery: {
         merge_approver_role_keys: ['admin'],
         deployment_approver_role_keys: ['owner', 'admin'],
+      },
+    });
+  });
+
+  it('updates repository check profiles with the current canonical version', async () => {
+    mockContextQuery.mockReturnValue({
+      data: context({
+        repositories: [
+          {
+            ...repository,
+            check_profiles: [
+              {
+                profile_id: 'package-check',
+                label: 'Package check',
+                runner: 'npm',
+                script: 'check',
+                working_directory: '.',
+              },
+            ],
+          },
+        ],
+      }),
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+
+    renderWorkspace('settings');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit checks for stara-labs/stara-ui' }));
+    fireEvent.change(screen.getByLabelText('npm script'), {
+      target: { value: 'stara:precommit-ci' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save checks' }));
+
+    await waitFor(() => expect(mockUpdateRepository).toHaveBeenCalledTimes(1));
+    expect(mockUpdateRepository).toHaveBeenCalledWith({
+      repositoryId: repository.id,
+      payload: {
+        expected_version: repository.version,
+        check_profiles: [
+          {
+            profile_id: 'package-check',
+            label: 'Package check',
+            runner: 'npm',
+            script: 'stara:precommit-ci',
+            working_directory: '.',
+          },
+        ],
       },
     });
   });
