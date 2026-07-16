@@ -67,6 +67,12 @@ const identityActionUrl = (path: string, inviteToken?: string): string => {
   return url.toString();
 };
 
+const identityVerificationContinueUrl = (inviteToken?: string): string => {
+  const url = new URL(identityActionUrl('/verify', inviteToken));
+  url.searchParams.set('email_action', 'verify');
+  return url.toString();
+};
+
 const requireCurrentUser = (auth: Auth): User => {
   if (!auth.currentUser) {
     throw new Error('Sign in again to continue.');
@@ -199,8 +205,8 @@ export const registerIdentityPlatformAccount = async (
     }
     rememberIdentityPlatformSignupInvite(input.email, inviteToken);
     await authModule.sendEmailVerification(credential.user, {
-      url: identityActionUrl('/verify', inviteToken),
-      handleCodeInApp: true,
+      url: identityVerificationContinueUrl(inviteToken),
+      handleCodeInApp: false,
     });
   } finally {
     const initializedAuthContext = authContext;
@@ -227,8 +233,8 @@ export const resendIdentityPlatformEmailVerification = async (
   }
   const inviteToken = getIdentityPlatformSignupInvite(user.email);
   await authModule.sendEmailVerification(user, {
-    url: identityActionUrl('/verify', inviteToken),
-    handleCodeInApp: true,
+    url: identityVerificationContinueUrl(inviteToken),
+    handleCodeInApp: false,
   });
 };
 

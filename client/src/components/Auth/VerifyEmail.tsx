@@ -60,6 +60,14 @@ function IdentityPlatformVerifyEmail({
     const actionCode = params.get('oobCode');
     const inviteToken = inviteTokenFrom(params);
     if (!actionCode) {
+      if (params.get('email_action') === 'verify') {
+        if (inviteToken) {
+          rememberIdentityPlatformSignupInvite(undefined, inviteToken);
+        }
+        setStatus('success');
+        setMessage('Continue to sign in to complete multi-factor authentication.');
+        return;
+      }
       setStatus('error');
       setMessage('This verification link is invalid or incomplete.');
       return;
