@@ -186,10 +186,11 @@ describe('Identity Platform browser adapter', () => {
     expect(mockSendEmailVerification).toHaveBeenCalledWith(
       user,
       expect.objectContaining({
-        handleCodeInApp: true,
+        handleCodeInApp: false,
         url: expect.stringContaining('/verify?invite_token='),
       }),
     );
+    expect(mockSendEmailVerification.mock.calls[0]?.[1]?.url).toContain('email_action=verify');
     expect(mockSignOut).toHaveBeenCalledWith(auth);
     expect(getIdentityPlatformSignupInvite('new@partner.test')).toBe(
       'invite_token_123456789012345678901234',
@@ -222,7 +223,10 @@ describe('Identity Platform browser adapter', () => {
 
     expect(mockSendEmailVerification).toHaveBeenCalledWith(
       user,
-      expect.objectContaining({ handleCodeInApp: true, url: expect.stringContaining('/verify') }),
+      expect.objectContaining({
+        handleCodeInApp: false,
+        url: expect.stringContaining('email_action=verify'),
+      }),
     );
   });
 

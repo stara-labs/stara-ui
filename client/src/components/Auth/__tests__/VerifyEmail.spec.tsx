@@ -92,6 +92,27 @@ describe('VerifyEmail Identity Platform action handler', () => {
     expect(mockApplyIdentityPlatformEmailVerification).not.toHaveBeenCalled();
   });
 
+  it('continues after the hosted web handler verifies the email', async () => {
+    const inviteToken = 'invite_token_123456789012345678901234';
+    mockParams = new URLSearchParams({
+      email_action: 'verify',
+      invite_token: inviteToken,
+    });
+
+    render(<VerifyEmail />);
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Continue to sign in to complete multi-factor authentication.',
+      }),
+    ).toBeInTheDocument();
+    expect(mockRememberIdentityPlatformSignupInvite).toHaveBeenCalledWith(undefined, inviteToken);
+    expect(mockApplyIdentityPlatformEmailVerification).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to sign in' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true });
+  });
+
   it('routes password reset actions through the existing reset form', async () => {
     mockParams = new URLSearchParams({
       mode: 'resetPassword',
