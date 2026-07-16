@@ -8,12 +8,14 @@ import {
   Check,
   CircleDot,
   Play,
+  Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
   Settings2,
   ShieldCheck,
   Square,
+  Trash2,
   X,
 } from 'lucide-react';
 import type {
@@ -24,6 +26,7 @@ import type {
   TStaraEngineeringApproval,
   TStaraEngineeringContext,
   TStaraEngineeringEvidenceReference,
+  TStaraEngineeringRepository,
   TStaraEngineeringRunAggregate,
   TStaraEngineeringTaskAggregate,
 } from 'librechat-data-provider';
@@ -41,6 +44,7 @@ import {
   useStartStaraEngineeringRunMutation,
   useUpdateStaraBusinessProfileMutation,
   useUpdateStaraEngineeringPolicyMutation,
+  useUpdateStaraEngineeringRepositoryMutation,
 } from '~/data-provider';
 import { cn } from '~/utils';
 
@@ -943,31 +947,212 @@ function BusinessProfileForm({ context }: { context: TStaraEngineeringContext })
 }
 
 function RepositoryList({ context }: { context: TStaraEngineeringContext }) {
+  const [editingRepositoryId, setEditingRepositoryId] = useState<string | null>(null);
   if (context.repositories.length === 0) {
     return <p className="text-sm text-text-secondary">No repositories connected.</p>;
   }
   return (
     <div className="divide-y divide-border-light border-y border-border-light">
-      {context.repositories.map((repository) => (
-        <div
-          key={repository.id}
-          className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_10rem_10rem]"
-        >
-          <div>
-            <div className="text-sm font-medium text-text-primary">
-              {repository.repository_owner}/{repository.repository_name}
+      {context.repositories.map((repository) => {
+        const editing = repository.id === editingRepositoryId;
+        const checkScripts = repository.check_profiles.map((profile) => profile.script).join(', ');
+        return (
+          <div key={repository.id} className="py-3">
+            <div className="grid items-center gap-2 md:grid-cols-[minmax(0,1fr)_minmax(8rem,14rem)_8rem_2.5rem]">
+              <div>
+                <div className="text-sm font-medium text-text-primary">
+                  {repository.repository_owner}/{repository.repository_name}
+                </div>
+                <div className="mt-1 text-xs text-text-secondary">
+                  {repository.default_branch} / installation{' '}
+                  {repository.installation_id ?? 'missing'}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm text-text-secondary" title={checkScripts}>
+                  {checkScripts || 'No required checks'}
+                </div>
+                <div className="mt-1 text-xs text-text-secondary">
+                  {repository.check_profiles.length} check profile
+                  {repository.check_profiles.length === 1 ? '' : 's'}
+                </div>
+              </div>
+              <StatusBadge status={repository.status} />
+              {context.permissions.can_connect_repository ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Edit checks for ${repository.repository_owner}/${repository.repository_name}`}
+                  title="Edit check profiles"
+                  onClick={() => setEditingRepositoryId(editing ? null : repository.id)}
+                >
+                  {editing ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+                </Button>
+              ) : (
+                <span />
+              )}
             </div>
-            <div className="mt-1 text-xs text-text-secondary">
-              {repository.default_branch} / installation {repository.installation_id ?? 'missing'}
+            {editing ? (
+              <RepositoryCheckProfilesEditor
+                repository={repository}
+                onClose={() => setEditingRepositoryId(null)}
+              />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RepositoryCheckProfilesEditor({
+  repository,
+  onClose,
+}: {
+  repository: TStaraEngineeringRepository;
+  onClose: () => void;
+}) {
+  const { showToast } = useToastContext();
+  const [profiles, setProfiles] = useState(() =>
+    repository.check_profiles.map((profile) => ({ ...profile })),
+  );
+  const mutation = useUpdateStaraEngineeringRepositoryMutation();
+  const valid =
+    profiles.length <= 20 &&
+    profiles.every(
+      (profile) =>
+        profile.label.trim().length > 0 &&
+        profile.script.trim().length > 0 &&
+        profile.working_directory.trim().length > 0,
+    );
+
+  const addProfile = () => {
+    const usedIds = new Set(profiles.map((profile) => profile.profile_id));
+    let index = profiles.length + 1;
+    let profileId = index === 1 ? 'package-check' : `package-check-${index}`;
+    while (usedIds.has(profileId)) {
+      index += 1;
+      profileId = `package-check-${index}`;
+    }
+    setProfiles([
+      ...profiles,
+      {
+        profile_id: profileId,
+        label: 'Package check',
+        runner: 'npm',
+        script: '',
+        working_directory: '.',
+      },
+    ]);
+  };
+
+  const save = async () => {
+    try {
+      await mutation.mutateAsync({
+        repositoryId: repository.id,
+        payload: {
+          expected_version: repository.version,
+          check_profiles: profiles.map((profile) => ({
+            ...profile,
+            label: profile.label.trim(),
+            script: profile.script.trim(),
+            working_directory: profile.working_directory.trim(),
+          })),
+        },
+      });
+      showToast({ message: 'Repository checks updated.', status: 'success' });
+      onClose();
+    } catch (error) {
+      showToast({ message: errorMessage(error), status: 'error' });
+    }
+  };
+
+  return (
+    <div className="mt-3 grid gap-3 border-t border-border-light pt-3">
+      <div>
+        <h3 className="text-sm font-medium text-text-primary">Required npm checks</h3>
+        <p className="mt-1 text-xs text-text-secondary">
+          Each script runs from its configured repository directory before a pull request can
+          advance.
+        </p>
+      </div>
+      {profiles.length === 0 ? (
+        <p className="text-sm text-text-secondary">No required npm checks.</p>
+      ) : (
+        <div className="grid gap-3">
+          {profiles.map((profile, index) => (
+            <div
+              key={profile.profile_id}
+              className="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_2.5rem]"
+            >
+              <Field label="Check label">
+                <input
+                  value={profile.label}
+                  onChange={(event) =>
+                    setProfiles((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, label: event.target.value } : item,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <Field label="npm script">
+                <input
+                  value={profile.script}
+                  onChange={(event) =>
+                    setProfiles((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, script: event.target.value } : item,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <Field label="Working directory">
+                <input
+                  value={profile.working_directory}
+                  onChange={(event) =>
+                    setProfiles((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index
+                          ? { ...item, working_directory: event.target.value }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Remove ${profile.label || 'check'}`}
+                title="Remove check profile"
+                onClick={() =>
+                  setProfiles((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                }
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
-          <div className="text-sm text-text-secondary">
-            {repository.check_profiles.length} check profile
-            {repository.check_profiles.length === 1 ? '' : 's'}
-          </div>
-          <StatusBadge status={repository.status} />
+          ))}
         </div>
-      ))}
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button variant="outline" onClick={addProfile} disabled={profiles.length >= 20}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add npm check
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onClose} disabled={mutation.isLoading}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={!valid || mutation.isLoading}>
+            {mutation.isLoading ? <Spinner className="mr-2 h-4 w-4" /> : null}
+            Save checks
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

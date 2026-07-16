@@ -471,6 +471,8 @@ export const staraOrganizationTeam = (tenantId: string, teamId: string) =>
 export const staraEngineering = () => `${BASE_URL}/api/stara/engineering`;
 export const staraEngineeringContext = () => `${staraEngineering()}/context`;
 export const staraEngineeringRepositories = () => `${staraEngineering()}/repositories`;
+export const staraEngineeringRepository = (repositoryId: string) =>
+  `${staraEngineeringRepositories()}/${encodeURIComponent(repositoryId)}`;
 export const staraEngineeringBusinessProfile = () => `${staraEngineering()}/business-profile`;
 export const staraEngineeringPolicy = () => `${staraEngineering()}/policy`;
 export const staraEngineeringTasks = () => `${staraEngineering()}/tasks`;

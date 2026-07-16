@@ -652,6 +652,16 @@ export type TCreateStaraEngineeringRepositoryRequest = {
   activate?: boolean;
 };
 
+export type TUpdateStaraEngineeringRepositoryRequest = {
+  expected_version: number;
+  default_branch?: string;
+  installation_id?: string | null;
+  check_profiles?: TStaraEngineeringCheckProfile[];
+  deployment_target?: TStaraEngineeringDeploymentTarget | null;
+  risk_paths?: string[];
+  status?: 'pending' | 'active' | 'disabled';
+};
+
 export type TCreateStaraEngineeringTaskRequest = {
   idempotency_key: string;
   title: string;

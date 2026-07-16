@@ -16,6 +16,7 @@ const {
   decideEngineeringRunController,
   getEngineeringContextController,
   updateBusinessProfileController,
+  updateRepositoryConnectionController,
 } = require('./StaraEngineeringController');
 
 const originalStaraApiUrl = process.env.STARA_API_URL;
@@ -180,6 +181,45 @@ describe('StaraEngineeringController canonical API proxy', () => {
       'http://stara-api:3081/v1/orgs/11111111-1111-4111-8111-111111111111/business-profile',
       expect.objectContaining({
         method: 'PUT',
+        body: JSON.stringify(body),
+        headers: expect.objectContaining({
+          'x-stara-tenant-id': '11111111-1111-4111-8111-111111111111',
+        }),
+      }),
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('updates repository configuration under the server-resolved active organization', async () => {
+    mockFetchJson(activeOrganizations());
+    mockFetchJson({
+      repository: { ...repository(), version: 2 },
+      action_version_id: 'action-repository-update',
+    });
+    const res = makeRes();
+    const body = {
+      expected_version: 1,
+      check_profiles: [
+        {
+          profile_id: 'package-check',
+          label: 'Package check',
+          runner: 'npm',
+          script: 'stara:precommit-ci',
+          working_directory: '.',
+        },
+      ],
+    };
+
+    await updateRepositoryConnectionController(
+      makeReq({ params: { repositoryId: repository().id }, body }),
+      res,
+    );
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      `http://stara-api:3081/v1/engineering/repositories/${repository().id}`,
+      expect.objectContaining({
+        method: 'PATCH',
         body: JSON.stringify(body),
         headers: expect.objectContaining({
           'x-stara-tenant-id': '11111111-1111-4111-8111-111111111111',

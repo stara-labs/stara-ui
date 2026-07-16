@@ -187,6 +187,16 @@ export function createStaraEngineeringRepository(
   return request.post(endpoints.staraEngineeringRepositories(), payload);
 }
 
+export function updateStaraEngineeringRepository({
+  repositoryId,
+  payload,
+}: {
+  repositoryId: string;
+  payload: t.TUpdateStaraEngineeringRepositoryRequest;
+}): Promise<{ repository: t.TStaraEngineeringRepository; action_version_id: string }> {
+  return request.patch(endpoints.staraEngineeringRepository(repositoryId), payload);
+}
+
 export function updateStaraEngineeringPolicy(
   payload: t.TUpdateStaraEngineeringPolicyRequest,
 ): Promise<t.TStaraEngineeringPolicyConfig> {
