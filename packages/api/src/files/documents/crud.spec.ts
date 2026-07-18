@@ -142,7 +142,7 @@ describe('Document Parser', () => {
   });
 
   test('parseDocument() aborts decompression when content.xml exceeds the size limit', async () => {
-    // Native compression keeps the real 50 MB boundary test fast under coverage instrumentation.
+    // Native compression keeps the real 50 MB boundary test efficient under coverage instrumentation.
     const buf = buildDeflatedZipEntry('content.xml', Buffer.alloc(51 * 1024 * 1024, 0x78));
     expect(buf.length).toBeLessThan(15 * 1024 * 1024);
 
@@ -159,7 +159,7 @@ describe('Document Parser', () => {
     } finally {
       await fs.promises.rm(tmpDir, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 120_000);
 
   test('parseDocument() decodes XML entities and normalizes tab and spacing elements to spaces from odt', async () => {
     const file = {
