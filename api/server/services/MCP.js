@@ -145,16 +145,16 @@ async function resolveMcpConfigNames(req) {
   return Object.keys(appConfig?.mcpConfig || {});
 }
 
-function canonicalMcpBaselineGrants() {
-  const grants = (process.env.STARA_MCP_BASELINE_GRANTS ?? '')
-    .split(',')
+function canonicalMembershipMcpGrants(membership) {
+  const grants = (Array.isArray(membership?.mcp_grants) ? membership.mcp_grants : [])
+    .filter((grant) => typeof grant === 'string')
     .map((grant) => grant.trim())
     .filter(Boolean);
   if (grants.length === 0) {
-    throw new Error('STARA_MCP_BASELINE_GRANTS is required in canonical Stara MCP mode.');
+    throw new Error('Canonical Stara MCP requires API-issued grants for the active membership.');
   }
   if (grants.some((grant) => !/^[a-z0-9._:-]{1,128}$/i.test(grant))) {
-    throw new Error('STARA_MCP_BASELINE_GRANTS contains an invalid grant name.');
+    throw new Error('Canonical Stara MCP received an invalid API-issued grant name.');
   }
   return [...new Set(grants)];
 }
@@ -172,7 +172,6 @@ async function applyCanonicalStaraMcpContext(configs, user, registry) {
   if (!tenantId || !user?.id) {
     throw new Error('Canonical Stara MCP requires an authenticated tenant context.');
   }
-  const grants = canonicalMcpBaselineGrants();
   const account = await callStaraApi(user, '/v1/me', { tenantId });
   const membership = account.memberships?.find(
     (candidate) =>
@@ -191,6 +190,8 @@ async function applyCanonicalStaraMcpContext(configs, user, registry) {
   if (account.assurance?.email_verified !== true || account.assurance?.mfa_enrolled !== true) {
     throw new Error('Canonical Stara MCP requires verified email and MFA.');
   }
+  // Membership grants are issued by stara-api alongside the canonical role and scope.
+  const grants = canonicalMembershipMcpGrants(membership);
 
   const server = configs[STARA_MCP_SERVER_NAME];
   return {
