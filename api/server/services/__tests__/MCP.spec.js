@@ -191,7 +191,6 @@ describe('resolveAllMcpConfigs', () => {
   });
 
   it('injects canonical actor context only into the fixed Stara MCP server', async () => {
-    process.env.STARA_MCP_BASELINE_GRANTS = 'stara.memory.read';
     mockRegistry.isDynamicServerManagementEnabled.mockReturnValue(false);
     getAppConfig.mockResolvedValue({ mcpConfig: {} });
     mockRegistry.ensureConfigServers.mockResolvedValue({});
@@ -212,6 +211,13 @@ describe('resolveAllMcpConfigs', () => {
           membership_status: 'active',
           role_key: 'member',
           scope_ids: ['team:operations'],
+          mcp_grants: [
+            'stara.memory.read',
+            'stara.engineering.read',
+            'stara.engineering.write',
+            'stara.connectors.read',
+            'stara.connectors.execute',
+          ],
         },
       ],
       assurance: { email_verified: true, mfa_enrolled: true },
@@ -233,7 +239,8 @@ describe('resolveAllMcpConfigs', () => {
           'x-stara-actor-email': '{{LIBRECHAT_USER_EMAIL}}',
           'x-stara-scope': 'team:operations',
           'x-stara-role-ids': 'member',
-          'x-stara-grants': 'stara.memory.read',
+          'x-stara-grants':
+            'stara.memory.read,stara.engineering.read,stara.engineering.write,stara.connectors.read,stara.connectors.execute',
           'x-stara-email-verified': '{{LIBRECHAT_USER_EMAILVERIFIED}}',
           'x-stara-mfa-enrolled': '{{LIBRECHAT_USER_TWOFACTORENABLED}}',
         },
@@ -245,37 +252,90 @@ describe('resolveAllMcpConfigs', () => {
     });
   });
 
-  it('fails closed when canonical baseline grants are not configured', async () => {
+  it('fails closed when canonical membership grants are missing', async () => {
     mockRegistry.isDynamicServerManagementEnabled.mockReturnValue(false);
     getAppConfig.mockResolvedValue({ mcpConfig: {} });
     mockRegistry.ensureConfigServers.mockResolvedValue({});
     mockRegistry.getAllServerConfigs.mockResolvedValue({
       'stara-control-plane': { type: 'http', url: 'http://stara-mcp:3083/mcp' },
     });
+    mockCallStaraApi.mockResolvedValue({
+      user: { id: 'canonical-user-1' },
+      memberships: [
+        {
+          tenant_key: 'tenant-1',
+          membership_status: 'active',
+          role_key: 'member',
+          scope_ids: ['team:operations'],
+        },
+      ],
+      assurance: { email_verified: true, mfa_enrolled: true },
+    });
 
     await expect(resolveAllMcpConfigs('u1', { id: 'u1', role: 'user' })).rejects.toThrow(
-      'STARA_MCP_BASELINE_GRANTS is required',
+      'API-issued grants for the active membership',
     );
-    expect(mockCallStaraApi).not.toHaveBeenCalled();
+    expect(mockCallStaraApi).toHaveBeenCalledTimes(1);
   });
 
-  it('fails closed when a canonical baseline grant is not header-safe', async () => {
-    process.env.STARA_MCP_BASELINE_GRANTS = 'stara.memory.read,invalid grant';
+  it('fails closed when an API-issued grant is not header-safe', async () => {
     mockRegistry.isDynamicServerManagementEnabled.mockReturnValue(false);
     getAppConfig.mockResolvedValue({ mcpConfig: {} });
     mockRegistry.ensureConfigServers.mockResolvedValue({});
     mockRegistry.getAllServerConfigs.mockResolvedValue({
       'stara-control-plane': { type: 'http', url: 'http://stara-mcp:3083/mcp' },
     });
+    mockCallStaraApi.mockResolvedValue({
+      user: { id: 'canonical-user-1' },
+      memberships: [
+        {
+          tenant_key: 'tenant-1',
+          membership_status: 'active',
+          role_key: 'member',
+          scope_ids: ['team:operations'],
+          mcp_grants: ['stara.memory.read', 'invalid grant'],
+        },
+      ],
+      assurance: { email_verified: true, mfa_enrolled: true },
+    });
 
     await expect(resolveAllMcpConfigs('u1', { id: 'u1', role: 'user' })).rejects.toThrow(
-      'contains an invalid grant name',
+      'invalid API-issued grant name',
     );
-    expect(mockCallStaraApi).not.toHaveBeenCalled();
+    expect(mockCallStaraApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not expand viewer grants from deployment configuration', async () => {
+    process.env.STARA_MCP_BASELINE_GRANTS = 'stara.engineering.approve,stara.connectors.execute';
+    mockRegistry.isDynamicServerManagementEnabled.mockReturnValue(false);
+    getAppConfig.mockResolvedValue({ mcpConfig: {} });
+    mockRegistry.ensureConfigServers.mockResolvedValue({});
+    mockRegistry.getAllServerConfigs.mockResolvedValue({
+      'stara-control-plane': { type: 'http', url: 'http://stara-mcp:3083/mcp' },
+    });
+    mockCallStaraApi.mockResolvedValue({
+      user: { id: 'canonical-user-1' },
+      memberships: [
+        {
+          tenant_key: 'tenant-1',
+          membership_status: 'active',
+          role_key: 'viewer',
+          scope_ids: ['org:acme'],
+          mcp_grants: ['stara.memory.read', 'stara.engineering.read', 'stara.connectors.read'],
+        },
+      ],
+      assurance: { email_verified: true, mfa_enrolled: true },
+    });
+
+    const result = await resolveAllMcpConfigs('u1', { id: 'u1', role: 'user' });
+
+    expect(result['stara-control-plane'].headers['x-stara-grants']).toBe(
+      'stara.memory.read,stara.engineering.read,stara.connectors.read',
+    );
+    delete process.env.STARA_MCP_BASELINE_GRANTS;
   });
 
   it('fails closed without an active scoped canonical membership', async () => {
-    process.env.STARA_MCP_BASELINE_GRANTS = 'stara.memory.read';
     mockRegistry.isDynamicServerManagementEnabled.mockReturnValue(false);
     getAppConfig.mockResolvedValue({ mcpConfig: {} });
     mockRegistry.ensureConfigServers.mockResolvedValue({});
