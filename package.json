@@ -80,6 +80,7 @@
     "lint": "eslint \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",
     "sort-imports": "node scripts/sort-imports.mts",
     "sort-imports:check": "node scripts/sort-imports.mts --check",
+    "security:audit:production": "npm audit --omit=dev --audit-level=high",
     "stara:precommit-ci": "node scripts/stara-precommit-ci.mjs",
     "format": "npx prettier --write \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",
     "b:api": "NODE_ENV=production bun run api/server/index.js",
@@ -184,8 +185,10 @@
     "hono": "^4.12.25",
     "@hono/node-server": "^1.19.10",
     "monaco-editor": {
-      "dompurify": "3.4.0"
+      "dompurify": "3.4.12"
     },
+    "protobufjs": "7.6.5",
+    "websocket-driver": "0.7.5",
     "svgo": "^2.8.2",
     "js-yaml": "^4.2.0",
     "ws": "^8.21.0",

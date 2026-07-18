@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 import * as fs from 'fs';
 import JSZip from 'jszip';
@@ -107,12 +108,16 @@ describe('Document Parser', () => {
   test('parseDocument() aborts decompression when content.xml exceeds the size limit', async () => {
     const zip = new JSZip();
     zip.file('mimetype', 'application/vnd.oasis.opendocument.text', { compression: 'STORE' });
-    zip.file('content.xml', 'x'.repeat(51 * 1024 * 1024), { compression: 'DEFLATE' });
+    zip.file('content.xml', 'x'.repeat(51 * 1024 * 1024), {
+      compression: 'DEFLATE',
+      compressionOptions: { level: 1 },
+    });
     const buf = await zip.generateAsync({ type: 'nodebuffer' });
 
-    const tmpPath = path.join(__dirname, 'bomb.odt');
-    await fs.promises.writeFile(tmpPath, buf);
+    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'librechat-odt-'));
+    const tmpPath = path.join(tmpDir, 'bomb.odt');
     try {
+      await fs.promises.writeFile(tmpPath, buf);
       const file = {
         originalname: 'bomb.odt',
         path: tmpPath,
@@ -120,9 +125,9 @@ describe('Document Parser', () => {
       } as Express.Multer.File;
       await expect(parseDocument({ file })).rejects.toThrow(/exceeds the 50MB decompressed limit/);
     } finally {
-      await fs.promises.unlink(tmpPath);
+      await fs.promises.rm(tmpDir, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
 
   test('parseDocument() decodes XML entities and normalizes tab and spacing elements to spaces from odt', async () => {
     const file = {

@@ -13,6 +13,7 @@ meili_data*
 librechat*
 Dockerfile*
 docs
+packages/api/src/files/documents/bomb.odt
 
 # Ignore all hidden files
 .*
