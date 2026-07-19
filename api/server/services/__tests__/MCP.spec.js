@@ -1,5 +1,6 @@
 const mockRegistry = {
   ensureConfigServers: jest.fn(),
+  getServerConfig: jest.fn(),
   getAllServerConfigs: jest.fn(),
   isDynamicServerManagementEnabled: jest.fn().mockReturnValue(true),
 };
@@ -64,7 +65,11 @@ const { getAppConfig } = require('~/server/services/Config');
 const { resolveConfigServers, resolveMcpConfigNames, resolveAllMcpConfigs } = require('../MCP');
 
 describe('resolveConfigServers', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRegistry.isDynamicServerManagementEnabled.mockReturnValue(true);
+    mockRegistry.getServerConfig.mockResolvedValue(undefined);
+  });
 
   it('resolves config servers for the current request context', async () => {
     getAppConfig.mockResolvedValue({ mcpConfig: { srv: { url: 'http://a' } } });
@@ -103,6 +108,71 @@ describe('resolveConfigServers', () => {
     await resolveConfigServers({ user: { id: 'u1' } });
 
     expect(mockRegistry.ensureConfigServers).toHaveBeenCalledWith({});
+  });
+
+  it('injects canonical Stara headers for agent tool loading', async () => {
+    mockRegistry.isDynamicServerManagementEnabled.mockReturnValue(false);
+    getAppConfig.mockResolvedValue({
+      mcpConfig: {
+        'stara-control-plane': { type: 'http', url: 'http://stara-mcp:3083/mcp' },
+      },
+    });
+    mockRegistry.ensureConfigServers.mockResolvedValue({
+      'stara-control-plane': { type: 'http', url: 'http://stara-mcp:3083/mcp' },
+    });
+    mockCallStaraApi.mockResolvedValue({
+      user: { id: 'canonical-user-1' },
+      memberships: [
+        {
+          tenant_key: 'tenant-1',
+          tenant_id: 'canonical-tenant-1',
+          membership_status: 'active',
+          role_key: 'member',
+          scope_ids: ['team:operations'],
+          mcp_grants: ['stara.memory.read'],
+        },
+      ],
+      assurance: { email_verified: true, mfa_enrolled: true },
+    });
+
+    const result = await resolveConfigServers({
+      user: { id: 'u1', role: 'user', identitySubject: 'fixture:user_maya' },
+    });
+
+    expect(result['stara-control-plane'].headers).toMatchObject({
+      'x-stara-tenant-id': 'tenant-1',
+      'x-stara-identity-subject': 'fixture:user_maya',
+      'x-stara-actor-id': 'canonical-user-1',
+      'x-stara-grants': 'stara.memory.read',
+    });
+  });
+
+  it('loads and secures the fixed Stara server when it is not a config override', async () => {
+    getAppConfig.mockResolvedValue({ mcpConfig: {} });
+    mockRegistry.ensureConfigServers.mockResolvedValue({});
+    mockRegistry.getServerConfig.mockResolvedValue({
+      type: 'http',
+      url: 'http://stara-mcp:3083/mcp',
+    });
+    mockCallStaraApi.mockResolvedValue({
+      user: { id: 'canonical-user-1' },
+      memberships: [
+        {
+          tenant_key: 'tenant-1',
+          tenant_id: 'canonical-tenant-1',
+          membership_status: 'active',
+          role_key: 'member',
+          scope_ids: ['team:operations'],
+          mcp_grants: ['stara.memory.read'],
+        },
+      ],
+      assurance: { email_verified: true, mfa_enrolled: true },
+    });
+
+    const result = await resolveConfigServers({ user: { id: 'u1', role: 'user' } });
+
+    expect(mockRegistry.getServerConfig).toHaveBeenCalledWith('stara-control-plane', 'u1', {});
+    expect(result['stara-control-plane'].headers['x-stara-tenant-id']).toBe('tenant-1');
   });
 });
 

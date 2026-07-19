@@ -70,6 +70,7 @@ const { manifestToolMap, toolkits } = require('~/app/clients/tools/manifest');
 const { createOnSearchResults } = require('~/server/services/Tools/search');
 const { reinitMCPServer } = require('~/server/services/Tools/mcp');
 const { createMCPPermissionContext, resolveConfigServers } = require('~/server/services/MCP');
+const { STARA_MCP_SERVER_NAME } = require('~/server/services/Config/staraDefaults');
 const { getMCPRequestContext } = require('~/server/services/MCPRequestContext');
 const { recordUsage } = require('~/server/services/Threads');
 const { loadTools } = require('~/app/clients/tools/util');
@@ -523,6 +524,14 @@ const isBuiltInTool = (toolName) =>
       nativeTools.has(toolName),
   );
 
+const mcpToolsRequiringUserAuth = (tools) =>
+  (tools ?? []).filter(
+    (toolName) =>
+      typeof toolName === 'string' &&
+      toolName.includes(Constants.mcp_delimiter) &&
+      !toolName.endsWith(`${Constants.mcp_delimiter}${STARA_MCP_SERVER_NAME}`),
+  );
+
 /**
  * Loads only tool definitions without creating tool instances.
  * This is the efficient path for event-driven mode where tools are loaded on-demand.
@@ -601,9 +610,10 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
 
   /** @type {Record<string, Record<string, string>>} */
   let userMCPAuthMap;
-  if (filteredTools?.some((t) => t.includes(Constants.mcp_delimiter))) {
+  const userAuthenticatedMcpTools = mcpToolsRequiringUserAuth(filteredTools);
+  if (userAuthenticatedMcpTools.length > 0) {
     userMCPAuthMap = await getUserMCPAuthMap({
-      tools: filteredTools,
+      tools: userAuthenticatedMcpTools,
       userId: req.user.id,
       findPluginAuthsByKeys,
     });
@@ -1160,9 +1170,10 @@ async function loadAgentTools({
 
   /** @type {Record<string, Record<string, string>>} */
   let userMCPAuthMap;
-  if (_agentTools?.some((t) => t.includes(Constants.mcp_delimiter))) {
+  const userAuthenticatedMcpTools = mcpToolsRequiringUserAuth(_agentTools);
+  if (userAuthenticatedMcpTools.length > 0) {
     userMCPAuthMap = await getUserMCPAuthMap({
-      tools: _agentTools,
+      tools: userAuthenticatedMcpTools,
       userId: req.user.id,
       findPluginAuthsByKeys,
     });
@@ -1795,4 +1806,5 @@ module.exports = {
   loadToolsForExecution,
   processRequiredActions,
   resolveAgentCapabilities,
+  mcpToolsRequiringUserAuth,
 };
