@@ -40,6 +40,7 @@ describe('applyStaraControlPlaneDefaults', () => {
   });
 
   it('adds the Stara Gateway custom endpoint and soft default model spec', () => {
+    process.env.STARA_ENV = 'local';
     process.env.STARA_GATEWAY_URL = 'http://stara-gateway:3082';
 
     const result = applyStaraControlPlaneDefaults({});
