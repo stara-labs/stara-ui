@@ -128,9 +128,20 @@ describe('Document Parser', () => {
       },
     );
     const zipfile = Object.assign(zipEvents, { close, readEntry, openReadStream });
-    const open = jest.spyOn(yauzl, 'open').mockImplementation((_filePath, _options, callback) => {
-      callback(null, zipfile as unknown as yauzl.ZipFile);
-    });
+    type OpenCallback = (error: Error | null, zipfile: yauzl.ZipFile) => void;
+    const open = jest
+      .spyOn(yauzl, 'open')
+      .mockImplementation(
+        (
+          _filePath: string,
+          optionsOrCallback?: yauzl.Options | OpenCallback,
+          callback?: OpenCallback,
+        ) => {
+          const resolvedCallback =
+            typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
+          resolvedCallback?.(null, zipfile as unknown as yauzl.ZipFile);
+        },
+      );
 
     try {
       const file = {
