@@ -41,6 +41,7 @@ describe('Environment Variable Extraction (MCP)', () => {
       ...originalEnv,
       TEST_API_KEY: 'test-api-key-value',
       ANOTHER_SECRET: 'another-secret-value',
+      TEST_SYSTEM_PATH: 'test-system-path',
     };
   });
 
@@ -820,7 +821,7 @@ describe('Environment Variable Extraction (MCP)', () => {
         env: {
           PROCESS_MODE: '{{PROCESS_MODE_CUSTOM}}', // Another custom var
           USER_HOME_DIR: '/home/{{LIBRECHAT_USER_USERNAME}}',
-          SYSTEM_PATH: '${PATH}', // Example of a system env var
+          SYSTEM_PATH: '${TEST_SYSTEM_PATH}', // Example of a system env var
         },
       };
 
@@ -849,7 +850,7 @@ describe('Environment Variable Extraction (MCP)', () => {
       expect('env' in result && result.env).toEqual({
         PROCESS_MODE: 'production',
         USER_HOME_DIR: '/home/john.doe',
-        SYSTEM_PATH: process.env.PATH, // Actual value of PATH from the test environment
+        SYSTEM_PATH: 'test-system-path',
       });
     });
 

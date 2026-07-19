@@ -9,8 +9,7 @@ const mockLogger = {
 
 function mockOptionalModule(moduleName, factory) {
   try {
-    require.resolve(moduleName);
-    jest.doMock(moduleName, factory);
+    jest.doMock(require.resolve(moduleName), factory);
   } catch {
     jest.doMock(moduleName, factory, { virtual: true });
   }

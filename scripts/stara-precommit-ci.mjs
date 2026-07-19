@@ -3,12 +3,14 @@ import { spawnSync } from 'node:child_process';
 
 const sourcePattern = /^(api|client|packages)\/.*\.(js|jsx|ts|tsx)$/;
 const frontendPattern = /^(client|packages\/client|packages\/data-provider)\//;
+const dependencyPattern = /(^|\/)package(?:-lock)?\.json$/;
 const mode = process.argv.includes('--push') ? 'pre-push' : 'pre-commit';
 
-function run(command, args) {
+function run(command, args, options = {}) {
   const result = spawnSync(commandForPlatform(command), args, {
     stdio: 'inherit',
     shell: process.platform === 'win32' && (command === 'npm' || command === 'npx'),
+    env: options.env ?? process.env,
   });
 
   if (result.error) {
@@ -80,28 +82,69 @@ function normalizeFiles(output) {
 
 const files = mode === 'pre-push' ? pushedFiles() : stagedFiles();
 const sourceFiles = files.filter((file) => sourcePattern.test(file));
+const dependenciesTouched = files.some((file) => dependencyPattern.test(file));
 
-if (sourceFiles.length === 0) {
-  console.log(`Stara ${mode} CI: no source files to check.`);
+if (sourceFiles.length === 0 && !dependenciesTouched) {
+  console.log(`Stara ${mode} CI: no source or dependency files to check.`);
   process.exit(0);
 }
 
-console.log(`Stara ${mode} CI: checking source files:`);
-for (const file of sourceFiles) {
+console.log(`Stara ${mode} CI: checking files:`);
+for (const file of files) {
   console.log(`- ${file}`);
 }
 
-run('npx', [
-  'eslint',
-  '--no-error-on-unmatched-pattern',
-  '--config',
-  'eslint.config.mjs',
-  '--max-warnings=0',
-  '--',
-  ...sourceFiles,
-]);
-run('npx', ['prettier', '--check', '--no-error-on-unmatched-pattern', '--', ...sourceFiles]);
-run('node', ['scripts/sort-imports.mts', '--check', ...sourceFiles]);
+if (sourceFiles.length > 0) {
+  run('npx', [
+    'eslint',
+    '--no-error-on-unmatched-pattern',
+    '--config',
+    'eslint.config.mjs',
+    '--max-warnings=0',
+    '--',
+    ...sourceFiles,
+  ]);
+  run('npx', ['prettier', '--check', '--no-error-on-unmatched-pattern', '--', ...sourceFiles]);
+  run('node', ['scripts/sort-imports.mts', '--check', ...sourceFiles]);
+}
+
+if (dependenciesTouched) {
+  // A lockfile-only change can alter every workspace and the production image.
+  run('npm', ['run', 'security:audit:production']);
+  run('npm', ['run', 'build:safe']);
+
+  if (process.platform === 'win32') {
+    run('npm', ['run', 'test:client']);
+    // Reset Jest's retained heap between shards; the complete API suite exceeds 8 GB in one process.
+    for (const shard of ['1/2', '2/2']) {
+      run(
+        'npm',
+        [
+          '--prefix',
+          'api',
+          'run',
+          'test:ci',
+          '--',
+          '--maxWorkers=2',
+          '--silent',
+          `--shard=${shard}`,
+        ],
+        {
+          env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=8192' },
+        },
+      );
+    }
+    run('npm', ['--prefix', 'packages/api', 'run', 'test:ci', '--', '--maxWorkers=2', '--silent']);
+    run('npm', ['run', 'test:packages:data-provider']);
+    run('npm', ['run', 'test:packages:data-schemas']);
+  } else {
+    run('npm', ['run', 'test:all']);
+  }
+
+  run('npm', ['--prefix', 'packages/client', 'run', 'test:ci']);
+  run('npm', ['run', 'test:config']);
+  process.exit(0);
+}
 
 const touched = (pattern) => files.some((file) => pattern.test(file));
 const frontendTouched = touched(frontendPattern);

@@ -1,6 +1,7 @@
 import path from 'path';
-import * as fs from 'fs';
-import JSZip from 'jszip';
+import yauzl from 'yauzl';
+import { EventEmitter } from 'node:events';
+import type { Readable } from 'node:stream';
 import { parseDocument } from './crud';
 
 describe('Document Parser', () => {
@@ -105,22 +106,54 @@ describe('Document Parser', () => {
   });
 
   test('parseDocument() aborts decompression when content.xml exceeds the size limit', async () => {
-    const zip = new JSZip();
-    zip.file('mimetype', 'application/vnd.oasis.opendocument.text', { compression: 'STORE' });
-    zip.file('content.xml', 'x'.repeat(51 * 1024 * 1024), { compression: 'DEFLATE' });
-    const buf = await zip.generateAsync({ type: 'nodebuffer' });
+    const streamEvents = new EventEmitter();
+    const readStream = Object.assign(streamEvents, {
+      destroy: jest.fn((error?: Error) => {
+        if (error) {
+          streamEvents.emit('error', error);
+        }
+        return readStream;
+      }),
+    }) as unknown as Readable;
+    const zipEvents = new EventEmitter();
+    const close = jest.fn();
+    const readEntry = jest.fn(() => {
+      queueMicrotask(() => zipEvents.emit('entry', { fileName: 'content.xml' } as yauzl.Entry));
+    });
+    const openReadStream = jest.fn(
+      (_entry: yauzl.Entry, callback: (error: Error | null, stream?: Readable) => void) => {
+        callback(null, readStream);
+        // The production guard checks byteLength before retaining the chunk.
+        queueMicrotask(() => streamEvents.emit('data', { byteLength: 51 * 1024 * 1024 }));
+      },
+    );
+    const zipfile = Object.assign(zipEvents, { close, readEntry, openReadStream });
+    type OpenCallback = (error: Error | null, zipfile: yauzl.ZipFile) => void;
+    const open = jest
+      .spyOn(yauzl, 'open')
+      .mockImplementation(
+        (
+          _filePath: string,
+          optionsOrCallback?: yauzl.Options | OpenCallback,
+          callback?: OpenCallback,
+        ) => {
+          const resolvedCallback =
+            typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
+          resolvedCallback?.(null, zipfile as unknown as yauzl.ZipFile);
+        },
+      );
 
-    const tmpPath = path.join(__dirname, 'bomb.odt');
-    await fs.promises.writeFile(tmpPath, buf);
     try {
       const file = {
         originalname: 'bomb.odt',
-        path: tmpPath,
+        path: 'unused.odt',
+        size: 1,
         mimetype: 'application/vnd.oasis.opendocument.text',
       } as Express.Multer.File;
       await expect(parseDocument({ file })).rejects.toThrow(/exceeds the 50MB decompressed limit/);
+      expect(close).toHaveBeenCalledTimes(1);
     } finally {
-      await fs.promises.unlink(tmpPath);
+      open.mockRestore();
     }
   });
 

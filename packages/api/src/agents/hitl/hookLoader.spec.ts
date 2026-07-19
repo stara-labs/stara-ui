@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { logger } from '@librechat/data-schemas';
 import { getRegisteredToolApprovalHookCount, clearToolApprovalHooks } from './hooks';
 import { loadToolApprovalHooks } from './hookLoader';
@@ -143,11 +145,14 @@ describe('loadToolApprovalHooks', () => {
 
     test('resolves a ./ relative path to a file:// URL', async () => {
       const importModule = jest.fn(async () => ({ default: goodModule }));
+      const basePath = path.resolve('srv/app');
       await loadToolApprovalHooks([{ module: './hooks/x.js' }], {
         importModule,
-        basePath: '/srv/app',
+        basePath,
       });
-      expect(importModule).toHaveBeenCalledWith('file:///srv/app/hooks/x.js');
+      expect(importModule).toHaveBeenCalledWith(
+        pathToFileURL(path.resolve(basePath, './hooks/x.js')).href,
+      );
     });
   });
 });
