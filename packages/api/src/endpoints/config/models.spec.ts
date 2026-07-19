@@ -24,6 +24,24 @@ jest.mock('~/utils/staraCloudRunAuth', () => ({
 import { SCOPED_TOKEN_CONFIG_KEY_PREFIX } from '../keys';
 import { createLoadConfigModels } from './models';
 
+const canonicalGatewayContextKey = Symbol.for('@stara-labs/canonical-gateway-context');
+
+function canonicalGatewayUser() {
+  const user = { id: 'user-1', tenantId: 'tenant-a' };
+  Object.defineProperty(user, canonicalGatewayContextKey, {
+    value: {
+      tenant_id: 'tenant-a',
+      actor_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      identity_subject: 'identity-user-1',
+      identity_email: 'user@example.com',
+      scope: ['org:a'],
+      grants: ['stara.memory.read'],
+      assurance: { email_verified: true, mfa_enrolled: true },
+    },
+  });
+  return user;
+}
+
 beforeEach(() => {
   mockGetStaraCloudRunIdentityHeaders.mockReset().mockResolvedValue({});
 });
@@ -214,7 +232,7 @@ describe('createLoadConfigModels – user-provided baseURL header guard', () => 
     });
 
     await loadConfigModels({
-      user: { id: 'user-1', tenantId: 'tenant-a' },
+      user: canonicalGatewayUser(),
       config: undefined,
     } as unknown as ServerRequest);
 
@@ -228,9 +246,44 @@ describe('createLoadConfigModels – user-provided baseURL header guard', () => 
         headers: {
           'X-Stara-Test': 'configured',
           'x-serverless-authorization': 'Bearer header.payload.signature',
+          'x-stara-tenant-id': 'tenant-a',
+          'x-stara-identity-subject': 'identity-user-1',
+          'x-stara-actor-email': 'user@example.com',
+          'x-stara-actor-id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          'x-stara-scope': 'org:a',
+          'x-stara-grants': 'stara.memory.read',
+          'x-stara-email-verified': 'true',
+          'x-stara-mfa-enrolled': 'true',
         },
       }),
     );
+  });
+
+  it('does not advertise or fetch Stara Gateway models without canonical context', async () => {
+    const loadConfigModels = createLoadConfigModels({
+      getAppConfig: jest.fn().mockResolvedValue({
+        endpoints: {
+          [EModelEndpoint.custom]: [
+            {
+              name: 'Stara Gateway',
+              baseURL: 'https://gateway.example.run.app/v1',
+              apiKey: 'stara-key',
+              models: { fetch: true, default: ['stara-memory-direct'] },
+            },
+          ],
+        },
+      }),
+      getUserKeyValues: jest.fn(),
+      fetchModels,
+    });
+
+    const models = await loadConfigModels({
+      user: { id: 'user-1' },
+      config: undefined,
+    } as unknown as ServerRequest);
+
+    expect(models['Stara Gateway']).toEqual([]);
+    expect(fetchModels).not.toHaveBeenCalled();
   });
 
   it('tenant-scopes the fetched token config cache key for system-defined endpoints', async () => {

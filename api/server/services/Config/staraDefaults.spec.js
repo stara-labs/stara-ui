@@ -13,6 +13,20 @@ describe('applyStaraControlPlaneDefaults', () => {
     delete process.env.STARA_GATEWAY_URL;
     delete process.env.STARA_GATEWAY_API_KEY;
     delete process.env.STARA_MCP_URL;
+    delete process.env.STARA_ENV;
+  });
+
+  it('never advertises the mock provider as a production fallback', () => {
+    process.env.STARA_ENV = 'production';
+    process.env.STARA_GATEWAY_URL = 'https://gateway.example.run.app';
+
+    const result = applyStaraControlPlaneDefaults({});
+    const endpoint = result.endpoints.custom[0];
+    const spec = result.modelSpecs.list[0];
+
+    expect(endpoint.models.default).toEqual(['stara-memory-direct']);
+    expect(endpoint.models.default).not.toContain('stara-frontier-mock');
+    expect(spec.preset.model).toBe('stara-memory-direct');
   });
 
   afterAll(() => {
@@ -26,6 +40,7 @@ describe('applyStaraControlPlaneDefaults', () => {
   });
 
   it('adds the Stara Gateway custom endpoint and soft default model spec', () => {
+    process.env.STARA_ENV = 'local';
     process.env.STARA_GATEWAY_URL = 'http://stara-gateway:3082';
 
     const result = applyStaraControlPlaneDefaults({});

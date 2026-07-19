@@ -2,8 +2,10 @@ jest.mock('node-fetch', () => jest.fn());
 
 const fetch = require('node-fetch');
 const {
+  getCanonicalGatewayContext,
   getCanonicalRequestUser,
   isCanonicalIdentityContextEnabled,
+  requireCanonicalGatewayContext,
   resolveCanonicalRequestUser,
   runWithCanonicalRequestUser,
 } = require('./StaraApiClient');
@@ -39,6 +41,18 @@ describe('StaraApiClient canonical request identity', () => {
     await expect(resolveCanonicalRequestUser(user)).resolves.toBe(user);
 
     expect(user.tenantId).toBe('tenant_acme');
+    expect(getCanonicalGatewayContext(user)).toEqual({
+      tenant_id: 'tenant_acme',
+      tenant_uuid: '11111111-1111-5111-8111-111111111111',
+      actor_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      identity_subject: 'librechat:user_owner',
+      identity_email: 'maya@example.com',
+      role_key: 'owner',
+      scope: ['org:acme'],
+      grants: ['stara.memory.read'],
+      assurance: { email_verified: true, mfa_enrolled: true },
+    });
+    expect(JSON.stringify(user)).not.toContain('stara.memory.read');
     expect(fetch).toHaveBeenCalledWith(
       'http://stara-api:3081/v1/me',
       expect.objectContaining({
@@ -54,6 +68,7 @@ describe('StaraApiClient canonical request identity', () => {
     await resolveCanonicalRequestUser(user);
 
     expect(user.tenantId).toBeUndefined();
+    expect(getCanonicalGatewayContext(user)).toBeUndefined();
   });
 
   it('allows an unsynchronized identity to reach onboarding without retaining Mongo tenant state', async () => {
@@ -63,6 +78,7 @@ describe('StaraApiClient canonical request identity', () => {
     await expect(resolveCanonicalRequestUser(user)).resolves.toBe(user);
 
     expect(user.tenantId).toBeUndefined();
+    expect(getCanonicalGatewayContext(user)).toBeUndefined();
   });
 
   it('fails closed for a missing or inconsistent canonical active-membership contract', async () => {
@@ -106,19 +122,74 @@ describe('StaraApiClient canonical request identity', () => {
       'Canonical request identity is unavailable',
     );
   });
+
+  it('fails closed when canonical Gateway authority is incomplete or mismatched', async () => {
+    mockAccount({
+      active_tenant_id: 'tenant_acme',
+      memberships: [activeMembership({ scope_ids: [] })],
+    });
+    await expect(resolveCanonicalRequestUser(makeUser())).rejects.toMatchObject({
+      status: 503,
+      code: 'canonical_identity_context_unavailable',
+    });
+
+    mockAccount({
+      active_tenant_id: 'tenant_acme',
+      user: canonicalUser({ identity_subject: 'spoofed-subject' }),
+      memberships: [activeMembership()],
+    });
+    await expect(resolveCanonicalRequestUser(makeUser())).rejects.toMatchObject({
+      status: 503,
+      code: 'canonical_identity_context_unavailable',
+    });
+  });
+
+  it('requires an active canonical tenant before Gateway use', () => {
+    expect(() => requireCanonicalGatewayContext(makeUser())).toThrow(
+      'Select an active Stara organization',
+    );
+  });
 });
 
-function activeMembership() {
+function activeMembership(overrides = {}) {
   return {
     tenant_id: '11111111-1111-5111-8111-111111111111',
     tenant_key: 'tenant_acme',
+    tenant_slug: 'acme',
+    tenant_name: 'Acme',
     tenant_status: 'active',
+    role_key: 'owner',
+    scope_ids: ['org:acme'],
     membership_status: 'active',
+    mcp_grants: ['stara.memory.read'],
+    ...overrides,
   };
 }
 
 function mockAccount(overrides) {
-  mockJson({ user: { id: 'user_owner' }, assurance: {}, ...overrides });
+  mockJson({
+    user: canonicalUser(),
+    assurance: {
+      email_verified: true,
+      mfa_enrolled: true,
+      regulated_surfaces_ready: true,
+    },
+    ...overrides,
+  });
+}
+
+function canonicalUser(overrides = {}) {
+  return {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    identity_subject: 'librechat:user_owner',
+    email: 'maya@example.com',
+    display_name: 'Maya',
+    status: 'active',
+    email_verified: true,
+    mfa_enrolled: true,
+    profile: {},
+    ...overrides,
+  };
 }
 
 function mockJson(payload, status = 200) {

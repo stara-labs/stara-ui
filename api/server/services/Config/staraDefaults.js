@@ -2,7 +2,17 @@ const STARA_GATEWAY_ENDPOINT_NAME = 'Stara Gateway';
 const STARA_GATEWAY_SPEC_NAME = 'stara-gateway-default';
 const STARA_MCP_SERVER_NAME = 'stara-control-plane';
 
-const STARA_MODELS = ['stara-frontier-mock', 'stara-memory-direct', 'stara-secure-llama'];
+const PRODUCTION_STARA_MODELS = ['stara-memory-direct'];
+const LOCAL_STARA_MODELS = ['stara-frontier-mock', 'stara-memory-direct', 'stara-secure-llama'];
+
+function staraModels() {
+  const environment = String(process.env.STARA_ENV ?? process.env.NODE_ENV ?? '')
+    .trim()
+    .toLowerCase();
+  return ['local', 'development', 'test'].includes(environment)
+    ? LOCAL_STARA_MODELS
+    : PRODUCTION_STARA_MODELS;
+}
 
 function trimTrailingSlash(value) {
   return value.replace(/\/+$/, '');
@@ -51,6 +61,7 @@ function applyGatewayDefaults(config, gatewayUrl) {
   if (!gatewayUrl) {
     return config;
   }
+  const models = staraModels();
 
   const custom = config.endpoints?.custom ?? [];
   const customWithGateway = hasEndpoint(custom, STARA_GATEWAY_ENDPOINT_NAME)
@@ -62,7 +73,7 @@ function applyGatewayDefaults(config, gatewayUrl) {
           apiKey: process.env.STARA_GATEWAY_API_KEY || 'stara-local-dev-key',
           baseURL: openAIBaseUrl(gatewayUrl),
           models: {
-            default: STARA_MODELS,
+            default: models,
             fetch: true,
           },
           titleConvo: false,
@@ -89,7 +100,7 @@ function applyGatewayDefaults(config, gatewayUrl) {
           softDefault: !specs.some((spec) => spec?.default === true || spec?.softDefault === true),
           preset: {
             endpoint: STARA_GATEWAY_ENDPOINT_NAME,
-            model: STARA_MODELS[0],
+            model: models[0],
           },
           mcpServers: [STARA_MCP_SERVER_NAME],
         },

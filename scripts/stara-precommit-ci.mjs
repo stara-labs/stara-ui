@@ -165,11 +165,23 @@ if (apiTouched) {
   }
   run('npm', ['run', 'build:data-schemas']);
   run('npm', ['run', 'build:api']);
-  run('npm', ['run', 'test:api']);
+  if (process.platform === 'win32') {
+    run('npm', ['--prefix', 'api', 'run', 'test:ci', '--', '--maxWorkers=2', '--silent'], {
+      env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=8192' },
+    });
+  } else {
+    run('npm', ['run', 'test:api']);
+  }
 }
 
 if (touched(/^packages\/api\//)) {
-  run('npm', ['run', 'test:packages:api']);
+  if (process.platform === 'win32') {
+    run('npm', ['--prefix', 'packages/api', 'run', 'test:ci', '--', '--maxWorkers=2', '--silent'], {
+      env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=8192' },
+    });
+  } else {
+    run('npm', ['run', 'test:packages:api']);
+  }
 }
 
 if (touched(/^packages\/data-provider\//)) {

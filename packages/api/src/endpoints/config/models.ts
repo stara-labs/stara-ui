@@ -11,6 +11,7 @@ import type { AppConfig } from '@librechat/data-schemas';
 import type { ServerRequest, GetUserKeyValuesFunction, UserKeyValues } from '~/types';
 import type { FetchModelsParams } from '~/endpoints/models';
 import type { GetAppConfigOptions } from '~/app/service';
+import { getStaraGatewayContextHeaders, isStaraGatewayTarget } from '~/utils/staraGatewayContext';
 import { getStaraCloudRunIdentityHeaders } from '~/utils/staraCloudRunAuth';
 import { fetchModels as defaultFetchModels } from '~/endpoints/models';
 import { getTokenConfigKey } from '~/endpoints/custom/initialize';
@@ -168,6 +169,9 @@ export function createLoadConfigModels(deps: LoadConfigModelsDeps) {
       baseURLIsUserProvided,
     } of resolved) {
       const { models, headers: configuredEndpointHeaders } = endpoint;
+      if (baseURLIsUserProvided && isStaraGatewayTarget(name)) {
+        continue;
+      }
       const cloudRunHeaders = baseURLIsUserProvided
         ? undefined
         : await getStaraCloudRunIdentityHeaders({
@@ -175,10 +179,21 @@ export function createLoadConfigModels(deps: LoadConfigModelsDeps) {
             targetName: name,
             targetUrl: BASE_URL,
           });
+      const canonicalGatewayHeaders = getStaraGatewayContextHeaders({
+        targetName: name,
+        user: req.user,
+      });
+      if (isStaraGatewayTarget(name) && !canonicalGatewayHeaders) {
+        continue;
+      }
+      const mergedEndpointHeaders = mergeHeaders(
+        mergeHeaders(configuredEndpointHeaders, cloudRunHeaders),
+        canonicalGatewayHeaders,
+      );
       const endpointHeaders =
-        cloudRunHeaders && Object.keys(cloudRunHeaders).length > 0
-          ? mergeHeaders(configuredEndpointHeaders, cloudRunHeaders)
-          : configuredEndpointHeaders;
+        mergedEndpointHeaders && Object.keys(mergedEndpointHeaders).length > 0
+          ? mergedEndpointHeaders
+          : undefined;
       // Include a fingerprint of the configured headers so two admin-trusted
       // endpoints that happen to share the same baseURL+apiKey but configure
       // different (potentially user-bound) headers don't reuse each other's
