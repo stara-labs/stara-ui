@@ -14,6 +14,7 @@ import type {
   EndpointTokenConfig,
   AnthropicModelOptions,
 } from '~/types';
+import { getStaraGatewayContextHeaders, isStaraGatewayTarget } from '~/utils/staraGatewayContext';
 import { getLLMConfig as getAnthropicLLMConfig } from '~/endpoints/anthropic/llm';
 import { getStaraCloudRunIdentityHeaders } from '~/utils/staraCloudRunAuth';
 import { extractDefaultParams } from '~/endpoints/openai/llm';
@@ -247,6 +248,9 @@ export async function initializeCustom({
   }
 
   if (userProvidesURL) {
+    if (isStaraGatewayTarget(endpoint)) {
+      throw new Error('Stara Gateway must use the server-configured service URL.');
+    }
     await validateEndpointURL(baseURL, endpoint, appConfig?.endpoints?.allowedAddresses);
   }
 
@@ -257,12 +261,18 @@ export async function initializeCustom({
         targetName: endpoint,
         targetUrl: baseURL,
       });
+  const canonicalGatewayHeaders = getStaraGatewayContextHeaders({
+    targetName: endpoint,
+    user: req.user,
+    required: true,
+  });
+  const runtimeHeaders = mergeHeaders(
+    mergeHeaders(endpointConfig.headers, cloudRunHeaders),
+    canonicalGatewayHeaders,
+  );
   const runtimeEndpointConfig = {
     ...endpointConfig,
-    headers:
-      cloudRunHeaders && Object.keys(cloudRunHeaders).length > 0
-        ? mergeHeaders(endpointConfig.headers, cloudRunHeaders)
-        : endpointConfig.headers,
+    headers: runtimeHeaders && Object.keys(runtimeHeaders).length > 0 ? runtimeHeaders : undefined,
   };
 
   let endpointTokenConfig: EndpointTokenConfig | undefined;

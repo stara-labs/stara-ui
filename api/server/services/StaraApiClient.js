@@ -3,11 +3,14 @@ const { AsyncLocalStorage } = require('node:async_hooks');
 const {
   callStaraApi,
   getUserId,
+  identitySubject,
   normalizeEmail,
   safeString,
 } = require('~/server/services/StaraServiceClient');
 
 const canonicalRequestUserStorage = new AsyncLocalStorage();
+const canonicalGatewayContextKey = Symbol.for('@stara-labs/canonical-gateway-context');
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const requireStaraUser = (user) => {
   const userId = getUserId(user);
@@ -33,7 +36,107 @@ const isCanonicalIdentityContextEnabled = () => {
 
 const clearRequestTenant = (user) => {
   user.tenantId = undefined;
+  Reflect.deleteProperty(user, canonicalGatewayContextKey);
   return user;
+};
+
+const unavailableContext = (message) => {
+  const error = new Error(message);
+  error.status = 503;
+  error.code = 'canonical_identity_context_unavailable';
+  return error;
+};
+
+const requiredCanonicalString = (value, label, maxLength = 512) => {
+  const normalized = safeString(value, undefined, maxLength);
+  if (!normalized || /[\r\n\0]/.test(normalized)) {
+    throw unavailableContext(`The canonical ${label} is unavailable`);
+  }
+  return normalized;
+};
+
+const requiredCanonicalStringList = (value, label, { allowEmpty = false } = {}) => {
+  if (!Array.isArray(value) || value.length > 100) {
+    throw unavailableContext(`The canonical ${label} are unavailable`);
+  }
+  const normalized = value.map((item) => requiredCanonicalString(item, label, 256));
+  if ((!allowEmpty && normalized.length === 0) || new Set(normalized).size !== normalized.length) {
+    throw unavailableContext(`The canonical ${label} are unavailable`);
+  }
+  return Object.freeze(normalized);
+};
+
+const setCanonicalGatewayContext = (user, account, membership) => {
+  const actorId = requiredCanonicalString(account?.user?.id, 'actor ID');
+  if (!uuidPattern.test(actorId)) {
+    throw unavailableContext('The canonical actor ID is unavailable');
+  }
+
+  const resolvedIdentitySubject = requiredCanonicalString(
+    account?.user?.identity_subject,
+    'identity subject',
+  );
+  if (resolvedIdentitySubject !== identitySubject(user)) {
+    throw unavailableContext(
+      'The canonical identity subject does not match the authenticated user',
+    );
+  }
+
+  const identityEmail = normalizeEmail(account?.user?.email);
+  if (!identityEmail || identityEmail !== normalizeEmail(user?.email)) {
+    throw unavailableContext('The canonical identity email does not match the authenticated user');
+  }
+  if (account?.user?.status !== 'active') {
+    const error = new Error('The canonical Stara identity is not active');
+    error.status = 403;
+    error.code = 'identity_disabled';
+    throw error;
+  }
+
+  const assurance = account?.assurance;
+  if (
+    typeof assurance?.email_verified !== 'boolean' ||
+    typeof assurance?.mfa_enrolled !== 'boolean'
+  ) {
+    throw unavailableContext('The canonical identity assurance is unavailable');
+  }
+
+  const context = Object.freeze({
+    tenant_id: requiredCanonicalString(membership?.tenant_key, 'tenant key', 200),
+    tenant_uuid: requiredCanonicalString(membership?.tenant_id, 'tenant ID', 64),
+    actor_id: actorId,
+    identity_subject: resolvedIdentitySubject,
+    identity_email: identityEmail,
+    role_key: requiredCanonicalString(membership?.role_key, 'membership role', 64),
+    scope: requiredCanonicalStringList(membership?.scope_ids, 'membership scopes'),
+    grants: requiredCanonicalStringList(membership?.mcp_grants, 'MCP grants', {
+      allowEmpty: true,
+    }),
+    assurance: Object.freeze({
+      email_verified: assurance.email_verified,
+      mfa_enrolled: assurance.mfa_enrolled,
+    }),
+  });
+
+  Object.defineProperty(user, canonicalGatewayContextKey, {
+    configurable: true,
+    enumerable: false,
+    value: context,
+  });
+  return context;
+};
+
+const getCanonicalGatewayContext = (user) => user?.[canonicalGatewayContextKey];
+
+const requireCanonicalGatewayContext = (user) => {
+  const context = getCanonicalGatewayContext(user);
+  if (context) {
+    return context;
+  }
+  const error = new Error('Select an active Stara organization before using the Gateway');
+  error.status = 403;
+  error.code = 'active_tenant_required';
+  throw error;
 };
 
 const resolveCanonicalRequestUser = async (inputUser) => {
@@ -78,6 +181,7 @@ const resolveCanonicalRequestUser = async (inputUser) => {
     throw error;
   }
   user.tenantId = safeString(activeMembership.tenant_key, activeTenantId);
+  setCanonicalGatewayContext(user, account, activeMembership);
   return user;
 };
 
@@ -102,10 +206,12 @@ const getCanonicalRequestUser = (expectedUserId) => {
 
 module.exports = {
   callStaraApi,
+  getCanonicalGatewayContext,
   getUserId,
   getCanonicalRequestUser,
   isCanonicalIdentityContextEnabled,
   normalizeEmail,
+  requireCanonicalGatewayContext,
   requireStaraUser,
   resolveCanonicalRequestUser,
   runWithCanonicalRequestUser,

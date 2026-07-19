@@ -50,6 +50,22 @@ jest.mock('~/app/config', () => ({
 import { getTokenConfigKey, initializeCustom } from './initialize';
 import { SCOPED_TOKEN_CONFIG_KEY_PREFIX } from '../keys';
 
+const canonicalGatewayContextKey = Symbol.for('@stara-labs/canonical-gateway-context');
+
+function attachCanonicalGatewayContext(user: object) {
+  Object.defineProperty(user, canonicalGatewayContextKey, {
+    value: {
+      tenant_id: 'tenant-acme',
+      actor_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      identity_subject: 'identity-user-1',
+      identity_email: 'user@example.com',
+      scope: ['org:acme'],
+      grants: ['stara.memory.read'],
+      assurance: { email_verified: true, mfa_enrolled: true },
+    },
+  });
+}
+
 function createParams(overrides: {
   apiKey?: string;
   baseURL?: string;
@@ -102,6 +118,7 @@ describe('initializeCustom – Agents API user key resolution', () => {
       headers: { 'X-Stara-Test': 'configured' },
     });
     params.endpoint = 'Stara Gateway';
+    attachCanonicalGatewayContext(params.req.user as object);
 
     await initializeCustom(params);
 
@@ -116,13 +133,21 @@ describe('initializeCustom – Agents API user key resolution', () => {
         headers: {
           'X-Stara-Test': 'configured',
           'x-serverless-authorization': 'Bearer header.payload.signature',
+          'x-stara-tenant-id': 'tenant-acme',
+          'x-stara-identity-subject': 'identity-user-1',
+          'x-stara-actor-email': 'user@example.com',
+          'x-stara-actor-id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          'x-stara-scope': 'org:acme',
+          'x-stara-grants': 'stara.memory.read',
+          'x-stara-email-verified': 'true',
+          'x-stara-mfa-enrolled': 'true',
         },
       }),
       'Stara Gateway',
     );
   });
 
-  it('never mints Stara Cloud Run identity for a user-provided URL', async () => {
+  it('rejects a user-provided URL for the trusted Stara Gateway endpoint', async () => {
     const params = createParams({
       apiKey: 'stara-key',
       baseURL: AuthType.USER_PROVIDED,
@@ -130,9 +155,51 @@ describe('initializeCustom – Agents API user key resolution', () => {
     });
     params.endpoint = 'Stara Gateway';
 
-    await initializeCustom(params);
+    await expect(initializeCustom(params)).rejects.toThrow('server-configured service URL');
 
     expect(mockGetStaraCloudRunIdentityHeaders).not.toHaveBeenCalled();
+    expect(mockGetOpenAIConfig).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the Stara Gateway request lacks canonical authority', async () => {
+    const params = createParams({
+      apiKey: 'stara-key',
+      baseURL: 'https://gateway.example.run.app/v1',
+    });
+    params.endpoint = 'Stara Gateway';
+
+    await expect(initializeCustom(params)).rejects.toThrow(
+      'Canonical Stara Gateway context is unavailable',
+    );
+    expect(mockGetOpenAIConfig).not.toHaveBeenCalled();
+  });
+
+  it('overrides configured Gateway authority headers with canonical server values', async () => {
+    const params = createParams({
+      apiKey: 'stara-key',
+      baseURL: 'https://gateway.example.run.app/v1',
+      headers: {
+        'X-Stara-Tenant-Id': 'spoofed-tenant',
+        'x-stara-actor-id': 'spoofed-actor',
+        'x-stara-scope': 'spoofed-scope',
+      },
+    });
+    params.endpoint = 'Stara Gateway';
+    attachCanonicalGatewayContext(params.req.user as object);
+
+    await initializeCustom(params);
+
+    const clientOptions = mockGetOpenAIConfig.mock.calls[0][1] as {
+      headers: Record<string, string>;
+    };
+    expect(clientOptions.headers).toEqual(
+      expect.objectContaining({
+        'x-stara-tenant-id': 'tenant-acme',
+        'x-stara-actor-id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'x-stara-scope': 'org:acme',
+      }),
+    );
+    expect(clientOptions.headers).not.toHaveProperty('X-Stara-Tenant-Id');
   });
 
   it('should fetch user key even when expiresAt is not in request body (Agents API flow)', async () => {
