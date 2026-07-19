@@ -44,6 +44,8 @@ jobs:
           platforms: linux/amd64
           push: false
           target: client-package-build
+          cache-from: type=gha,scope=docker-smoke-client-package
+          cache-to: type=gha,mode=max,scope=docker-smoke-client-package
 
   api-runtime-smoke:
     name: API runtime smoke (production image boots)
@@ -124,5 +126,50 @@ jobs:
 
           if [ -z "$healthy" ]; then
             echo "::error::Production image failed to reach a ready /readyz within timeout"
+            exit 1
+          fi
+
+      - name: Boot native Stara image without legacy state services
+        run: |
+          set -u
+          docker run -d --name stara-native -p 3081:3080 \
+            -e HOST=0.0.0.0 -e PORT=3080 \
+            -e NODE_ENV=production \
+            -e STARA_NATIVE_RUNTIME=true \
+            -e STARA_CANONICAL_WORKSPACE=true \
+            -e STARA_CANONICAL_MCP_SERVERS=true \
+            -e STARA_IDENTITY_PLATFORM_AUTH=true \
+            -e STARA_LEGACY_FILE_READ_FALLBACK=false \
+            -e STARA_API_URL=http://stara-api.invalid \
+            -e STARA_IDENTITY_PLATFORM_PROJECT_ID=stara-native-smoke \
+            -e STARA_IDENTITY_PLATFORM_WEB_API_KEY=native-smoke-web-key \
+            -e CREDS_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            -e CREDS_IV=0123456789abcdef0123456789abcdef \
+            -e JWT_SECRET=docker-smoke-jwt-secret \
+            -e JWT_REFRESH_SECRET=docker-smoke-jwt-refresh-secret \
+            -e SEARCH=true \
+            librechat-api-smoke:ci
+
+          healthy=""
+          for i in $(seq 1 60); do
+            if [ "$(docker inspect -f '{{.State.Running}}' stara-native 2>/dev/null)" != "true" ]; then
+              echo "::error::Native Stara container exited during startup (exit code $(docker inspect -f '{{.State.ExitCode}}' stara-native 2>/dev/null))"
+              break
+            fi
+            if [ "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:3081/readyz 2>/dev/null || true)" = "200" ]; then
+              healthy="yes"
+              echo "Native /readyz returned 200 without legacy state services."
+              break
+            fi
+            sleep 2
+          done
+
+          echo "----- last 100 lines of native container logs -----"
+          docker logs stara-native 2>&1 | tail -100 || true
+          echo "---------------------------------------------------"
+          docker rm -f stara-native >/dev/null 2>&1 || true
+
+          if [ -z "$healthy" ]; then
+            echo "::error::Native Stara image failed to reach a ready /readyz within timeout"
             exit 1
           fi

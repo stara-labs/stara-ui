@@ -13,10 +13,16 @@ on:
       - 'packages/api/src/mcp/**'
       - 'packages/api/src/stream/**'
       - 'redis-config/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/cache-integration-tests.yml'
 
 permissions:
   contents: read
+
+concurrency:
+  group: cache-integration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   cache_integration_tests:
