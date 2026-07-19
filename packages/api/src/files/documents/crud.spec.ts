@@ -1,44 +1,8 @@
-import os from 'os';
 import path from 'path';
-import * as fs from 'fs';
-import { crc32, deflateRawSync } from 'node:zlib';
+import yauzl from 'yauzl';
+import { EventEmitter } from 'node:events';
+import type { Readable } from 'node:stream';
 import { parseDocument } from './crud';
-
-const buildDeflatedZipEntry = (name: string, content: Buffer): Buffer => {
-  const nameBytes = Buffer.from(name);
-  const compressed = deflateRawSync(content, { level: 1 });
-  const checksum = crc32(content);
-
-  const localHeader = Buffer.alloc(30 + nameBytes.length);
-  localHeader.writeUInt32LE(0x04034b50, 0);
-  localHeader.writeUInt16LE(20, 4);
-  localHeader.writeUInt16LE(8, 8);
-  localHeader.writeUInt32LE(checksum, 14);
-  localHeader.writeUInt32LE(compressed.length, 18);
-  localHeader.writeUInt32LE(content.length, 22);
-  localHeader.writeUInt16LE(nameBytes.length, 26);
-  nameBytes.copy(localHeader, 30);
-
-  const centralDirectory = Buffer.alloc(46 + nameBytes.length);
-  centralDirectory.writeUInt32LE(0x02014b50, 0);
-  centralDirectory.writeUInt16LE(20, 4);
-  centralDirectory.writeUInt16LE(20, 6);
-  centralDirectory.writeUInt16LE(8, 10);
-  centralDirectory.writeUInt32LE(checksum, 16);
-  centralDirectory.writeUInt32LE(compressed.length, 20);
-  centralDirectory.writeUInt32LE(content.length, 24);
-  centralDirectory.writeUInt16LE(nameBytes.length, 28);
-  nameBytes.copy(centralDirectory, 46);
-
-  const endOfCentralDirectory = Buffer.alloc(22);
-  endOfCentralDirectory.writeUInt32LE(0x06054b50, 0);
-  endOfCentralDirectory.writeUInt16LE(1, 8);
-  endOfCentralDirectory.writeUInt16LE(1, 10);
-  endOfCentralDirectory.writeUInt32LE(centralDirectory.length, 12);
-  endOfCentralDirectory.writeUInt32LE(localHeader.length + compressed.length, 16);
-
-  return Buffer.concat([localHeader, compressed, centralDirectory, endOfCentralDirectory]);
-};
 
 describe('Document Parser', () => {
   test('parseDocument() parses text from docx', async () => {
@@ -142,24 +106,45 @@ describe('Document Parser', () => {
   });
 
   test('parseDocument() aborts decompression when content.xml exceeds the size limit', async () => {
-    // Native compression keeps the real 50 MB boundary test efficient under coverage instrumentation.
-    const buf = buildDeflatedZipEntry('content.xml', Buffer.alloc(51 * 1024 * 1024, 0x78));
-    expect(buf.length).toBeLessThan(15 * 1024 * 1024);
+    const streamEvents = new EventEmitter();
+    const readStream = Object.assign(streamEvents, {
+      destroy: jest.fn((error?: Error) => {
+        if (error) {
+          streamEvents.emit('error', error);
+        }
+        return readStream;
+      }),
+    }) as unknown as Readable;
+    const zipEvents = new EventEmitter();
+    const close = jest.fn();
+    const readEntry = jest.fn(() => {
+      queueMicrotask(() => zipEvents.emit('entry', { fileName: 'content.xml' } as yauzl.Entry));
+    });
+    const openReadStream = jest.fn(
+      (_entry: yauzl.Entry, callback: (error: Error | null, stream?: Readable) => void) => {
+        callback(null, readStream);
+        // The production guard checks byteLength before retaining the chunk.
+        queueMicrotask(() => streamEvents.emit('data', { byteLength: 51 * 1024 * 1024 }));
+      },
+    );
+    const zipfile = Object.assign(zipEvents, { close, readEntry, openReadStream });
+    const open = jest.spyOn(yauzl, 'open').mockImplementation((_filePath, _options, callback) => {
+      callback(null, zipfile as unknown as yauzl.ZipFile);
+    });
 
-    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'librechat-odt-'));
-    const tmpPath = path.join(tmpDir, 'bomb.odt');
     try {
-      await fs.promises.writeFile(tmpPath, buf);
       const file = {
         originalname: 'bomb.odt',
-        path: tmpPath,
+        path: 'unused.odt',
+        size: 1,
         mimetype: 'application/vnd.oasis.opendocument.text',
       } as Express.Multer.File;
       await expect(parseDocument({ file })).rejects.toThrow(/exceeds the 50MB decompressed limit/);
+      expect(close).toHaveBeenCalledTimes(1);
     } finally {
-      await fs.promises.rm(tmpDir, { recursive: true, force: true });
+      open.mockRestore();
     }
-  }, 120_000);
+  });
 
   test('parseDocument() decodes XML entities and normalizes tab and spacing elements to spaces from odt', async () => {
     const file = {
