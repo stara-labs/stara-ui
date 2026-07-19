@@ -42,6 +42,7 @@ const {
   hasCanonicalPromptPermission,
   listCanonicalPromptIds,
 } = require('~/models/canonicalPrompts');
+const { getCanonicalRequestUser } = require('~/server/services/StaraApiClient');
 
 const isCanonicalResource = (resourceType) =>
   (canonicalAgentsEnabled() &&
@@ -90,15 +91,10 @@ const listCanonicalResourceIds = (user, resourceType, permission, invoke = false
 };
 
 const loadCanonicalPermissionUser = async (userId) => {
-  // Identity assurance still comes from the transitional LibreChat auth profile.
-  const user = await db.getUserById(
-    userId,
-    '_id id email username name tenantId idOnTheSource emailVerified twoFactorEnabled',
-  );
-  if (!user) {
-    throw new Error('User principal not found');
-  }
-  return { ...user, id: user.id ?? user._id?.toString() ?? String(userId) };
+  // Canonical resource checks run inside the authenticated request context.
+  // Reading that principal directly avoids a Mongo compatibility lookup and
+  // guarantees ACL decisions use the same tenant and assurance as stara-api.
+  return getCanonicalRequestUser(userId);
 };
 
 /** @type {boolean|null} */

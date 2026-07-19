@@ -113,6 +113,20 @@ describe('canonical workspace model adapter', () => {
     expect(mockGetCanonicalRequestUser).toHaveBeenCalledWith(USER_ID);
   });
 
+  it('treats a generated but not-yet-persisted conversation as empty history', async () => {
+    callStaraApi.mockRejectedValue(apiError(404, 'conversation_not_found'));
+    const methods = createCanonicalWorkspaceMethods(baseMethods());
+
+    await expect(
+      methods.getMessages({ user: USER_ID, conversationId: CONVERSATION_ID }),
+    ).resolves.toEqual([]);
+    expect(callStaraApi).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: TENANT_ID }),
+      `/v1/conversations/${CONVERSATION_ID}/messages?limit=100`,
+      expect.objectContaining({ tenantId: TENANT_ID }),
+    );
+  });
+
   it('amends an existing canonical message instead of writing a Mongo copy', async () => {
     callStaraApi.mockImplementation(async (_user, path, options = {}) => {
       if (path === `/v1/conversations/${CONVERSATION_ID}`) {

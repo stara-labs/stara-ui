@@ -100,6 +100,7 @@ const {
   loadToolsForExecution,
   processRequiredActions,
   resolveAgentCapabilities,
+  mcpToolsRequiringUserAuth,
 } = require('../ToolService');
 const { reinitMCPServer } = require('~/server/services/Tools/mcp');
 const { PENDING_STALE_MS } = require('@librechat/api');
@@ -1314,8 +1315,7 @@ describe('ToolService - Action Capability Gating', () => {
   });
 
   describe('userMCPAuthMap gating', () => {
-    const shouldFetchMCPAuth = (tools) =>
-      tools?.some((t) => t.includes(Constants.mcp_delimiter)) ?? false;
+    const shouldFetchMCPAuth = (tools) => mcpToolsRequiringUserAuth(tools).length > 0;
 
     it('should return true when agent has MCP tools', () => {
       const tools = ['web_search', `search${Constants.mcp_delimiter}my-mcp-server`, 'calculator'];
@@ -1355,6 +1355,25 @@ describe('ToolService - Action Capability Gating', () => {
         `echo${Constants.mcp_delimiter}test-server`,
       ];
       expect(shouldFetchMCPAuth(tools)).toBe(true);
+    });
+
+    it('does not query user plugin auth for the operator-managed Stara MCP server', () => {
+      const tools = [
+        `stara_context_build${Constants.mcp_delimiter}stara-control-plane`,
+        `stara_memory_search${Constants.mcp_delimiter}stara-control-plane`,
+      ];
+
+      expect(mcpToolsRequiringUserAuth(tools)).toEqual([]);
+    });
+
+    it('still queries user auth for non-Stara MCP integrations', () => {
+      const customerTool = `query${Constants.mcp_delimiter}customer-github`;
+      const tools = [
+        `stara_context_build${Constants.mcp_delimiter}stara-control-plane`,
+        customerTool,
+      ];
+
+      expect(mcpToolsRequiringUserAuth(tools)).toEqual([customerTool]);
     });
   });
 

@@ -120,10 +120,12 @@ async function getAppConfigForUser(userId, user) {
  * @returns {Promise<Record<string, import('@librechat/api').ParsedServerConfig>>}
  */
 async function resolveConfigServers(req) {
+  let configs;
+  let registry;
   try {
-    const registry = getMCPServersRegistry();
+    registry = getMCPServersRegistry();
     const appConfig = await getAppConfigForRequest(req);
-    return await registry.ensureConfigServers(appConfig?.mcpConfig || {});
+    configs = await registry.ensureConfigServers(appConfig?.mcpConfig || {});
   } catch (error) {
     logger.warn(
       '[resolveConfigServers] Failed to resolve config servers, degrading to empty:',
@@ -131,6 +133,20 @@ async function resolveConfigServers(req) {
     );
     return {};
   }
+  if (configs[STARA_MCP_SERVER_NAME] == null && req?.user?.id) {
+    const fixedStaraConfig = await registry.getServerConfig(
+      STARA_MCP_SERVER_NAME,
+      req.user.id,
+      configs,
+    );
+    if (fixedStaraConfig) {
+      configs = { ...configs, [STARA_MCP_SERVER_NAME]: fixedStaraConfig };
+    }
+  }
+  // Agent tool loading uses this narrower resolver rather than
+  // resolveAllMcpConfigs. Apply the same request-scoped canonical headers so
+  // Stara MCP never receives an untrusted or tenant-less connection.
+  return await applyCanonicalStaraMcpContext(configs, req?.user);
 }
 
 /**
@@ -160,11 +176,8 @@ function canonicalMembershipMcpGrants(membership) {
 }
 
 /** Overlay trusted actor headers after shared operator configs leave the registry cache. */
-async function applyCanonicalStaraMcpContext(configs, user, registry) {
-  if (
-    registry.isDynamicServerManagementEnabled?.() !== false ||
-    configs?.[STARA_MCP_SERVER_NAME] == null
-  ) {
+async function applyCanonicalStaraMcpContext(configs, user) {
+  if (configs?.[STARA_MCP_SERVER_NAME] == null) {
     return configs;
   }
 
@@ -237,7 +250,7 @@ async function resolveAllMcpConfigs(userId, user) {
   const configs = user?.role
     ? await registry.getAllServerConfigs(userId, configServers, user.role)
     : await registry.getAllServerConfigs(userId, configServers);
-  return await applyCanonicalStaraMcpContext(configs, user, registry);
+  return await applyCanonicalStaraMcpContext(configs, user);
 }
 
 function getServerCustomUserVars(userMCPAuthMap, serverName) {

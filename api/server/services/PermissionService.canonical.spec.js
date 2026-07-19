@@ -9,6 +9,20 @@ jest.mock('~/models', () => ({
   }),
 }));
 
+const mockCanonicalRequestUser = {
+  _id: 'user_maya',
+  id: 'user_maya',
+  email: 'maya@example.com',
+  tenantId: 'tenant_acme',
+  idOnTheSource: 'fixture:user_maya',
+  emailVerified: true,
+  twoFactorEnabled: true,
+};
+const mockGetCanonicalRequestUser = jest.fn(() => mockCanonicalRequestUser);
+jest.mock('~/server/services/StaraApiClient', () => ({
+  getCanonicalRequestUser: (...args) => mockGetCanonicalRequestUser(...args),
+}));
+
 jest.mock('~/models/canonicalAgents', () => ({
   canonicalAgentsEnabled: jest.fn(() => true),
   canonicalPermissionBits: jest.fn(() => 15),
@@ -67,6 +81,19 @@ const {
 
 describe('PermissionService canonical agents', () => {
   beforeEach(() => jest.clearAllMocks());
+
+  it('uses the authenticated canonical request principal instead of Mongo', async () => {
+    const { getUserById } = require('~/models');
+
+    await findAccessibleResources({
+      userId: 'user_maya',
+      resourceType: ResourceType.AGENT,
+      requiredPermissions: PermissionBits.VIEW,
+    });
+
+    expect(mockGetCanonicalRequestUser).toHaveBeenCalledWith('user_maya');
+    expect(getUserById).not.toHaveBeenCalled();
+  });
 
   it('maps in-app reads and remote invocation to distinct canonical checks', async () => {
     await expect(

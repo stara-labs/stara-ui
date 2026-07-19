@@ -585,12 +585,22 @@ const getCanonicalMessagesById = async (user, messageIds) => {
 const listCanonicalConversations = (user) =>
   collectCanonicalPages(user, '/v1/conversations', 'conversations');
 
-const listCanonicalMessages = (user, conversationId) =>
-  collectCanonicalPages(
-    user,
-    `/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
-    'messages',
-  );
+const listCanonicalMessages = async (user, conversationId) => {
+  try {
+    return await collectCanonicalPages(
+      user,
+      `/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
+      'messages',
+    );
+  } catch (error) {
+    // Resumable chat assigns a UUID before the first message is persisted. Until
+    // saveMessage creates the canonical conversation, that UUID has no history.
+    if (error.status === 404) {
+      return [];
+    }
+    throw error;
+  }
+};
 
 const collectCanonicalPages = async (user, path, resourceKey) => {
   const resources = [];
