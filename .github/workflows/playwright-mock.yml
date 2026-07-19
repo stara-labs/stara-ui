@@ -2,6 +2,18 @@ name: Playwright E2E Tests
 
 on:
   pull_request:
+    paths:
+      - '.github/workflows/playwright-mock.yml'
+      - 'api/**'
+      - 'client/**'
+      - 'config/**'
+      - 'e2e/**'
+      - 'packages/api/**'
+      - 'packages/client/**'
+      - 'packages/data-provider/**'
+      - 'packages/data-schemas/**'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
     inputs:
       reason:
@@ -118,6 +130,12 @@ jobs:
         run: npx playwright test --config=e2e/playwright.config.mock.ts
         env:
           CI: 'true'
+
+      - name: Run enforced model-spec E2E
+        run: npx playwright test --config=e2e/playwright.config.mock.ts enforced-model-specs.spec.ts
+        env:
+          CI: 'true'
+          E2E_MODEL_SPECS_ENFORCE: 'true'
 
       - name: Upload Playwright HTML report
         if: ${{ !cancelled() }}
