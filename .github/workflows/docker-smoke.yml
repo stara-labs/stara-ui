@@ -17,6 +17,23 @@ on:
       - 'packages/client/**'
       - 'packages/data-provider/**'
       - 'packages/data-schemas/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/docker-smoke.yml'
+      - '.dockerignore'
+      - 'Dockerfile.multi'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'api/**'
+      - 'client/**'
+      - 'config/**'
+      - 'skill/**'
+      - 'packages/api/**'
+      - 'packages/client/**'
+      - 'packages/data-provider/**'
+      - 'packages/data-schemas/**'
 
 permissions:
   contents: read

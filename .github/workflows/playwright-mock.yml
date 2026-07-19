@@ -14,6 +14,21 @@ on:
       - 'packages/data-schemas/**'
       - 'package.json'
       - 'package-lock.json'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/playwright-mock.yml'
+      - 'api/**'
+      - 'client/**'
+      - 'config/**'
+      - 'e2e/**'
+      - 'packages/api/**'
+      - 'packages/client/**'
+      - 'packages/data-provider/**'
+      - 'packages/data-schemas/**'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
     inputs:
       reason:
@@ -33,9 +48,14 @@ env:
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
 jobs:
-  e2e:
+  e2e-shards:
+    name: E2E shard ${{ matrix.shard }}/2
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       E2E_CHROMIUM_CHANNEL: chrome
     steps:
@@ -127,11 +147,12 @@ jobs:
           npx playwright install-deps chrome
 
       - name: Run mock-LLM Tier-1 e2e
-        run: npx playwright test --config=e2e/playwright.config.mock.ts
+        run: npx playwright test --config=e2e/playwright.config.mock.ts --shard=${{ matrix.shard }}/2
         env:
           CI: 'true'
 
       - name: Run enforced model-spec E2E
+        if: matrix.shard == 1
         run: npx playwright test --config=e2e/playwright.config.mock.ts enforced-model-specs.spec.ts
         env:
           CI: 'true'
@@ -141,7 +162,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: e2e/playwright-report/**
           retention-days: 7
           if-no-files-found: ignore
@@ -150,7 +171,24 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-test-results
+          name: playwright-test-results-${{ matrix.shard }}
           path: e2e/specs/.test-results/**
           retention-days: 7
           if-no-files-found: ignore
+
+  e2e:
+    name: e2e
+    if: always()
+    needs: e2e-shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every E2E shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.e2e-shards.result }}
+        run: |
+          if [ "$SHARD_RESULT" != "success" ]; then
+            echo "E2E shards completed with result: $SHARD_RESULT"
+            exit 1
+          fi
+          echo "Every E2E shard passed."

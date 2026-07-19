@@ -10,7 +10,7 @@ const lintablePattern =
 const frontendPattern = /^(client|packages\/client|packages\/data-provider)\//;
 const dependencyPattern = /(^|\/)package(?:-lock)?\.json$/;
 const gateInfrastructurePattern =
-  /^(?:scripts\/stara-.*\.mjs|\.husky\/(?:pre-commit|pre-push)|\.github\/workflows\/(?:stara-product-ci|playwright-mock|docker-smoke|cache-integration-tests)\.yml)$/;
+  /^(?:scripts\/stara-.*\.mjs|\.husky\/(?:pre-commit|pre-push)|\.github\/workflows\/(?:stara-product-ci|playwright-mock|docker-smoke|cache-integration-tests|backend-review)\.yml)$/;
 const testFilePattern = /\.(?:spec|test)\.(?:js|jsx|ts|tsx)$/;
 const quick = process.argv.includes('--quick');
 let mode = 'full';
