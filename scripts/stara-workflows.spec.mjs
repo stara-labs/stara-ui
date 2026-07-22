@@ -36,6 +36,11 @@ test('canonical Playwright and Docker workflows retain Stara-specific coverage',
     playwright.jobs['e2e-shards'].steps.find((step) => step.name === 'Run mock-LLM Tier-1 e2e').run,
     /--shard=\$\{\{ matrix\.shard \}\}\/2/,
   );
+  const playwrightRuntime = playwright.jobs['e2e-shards'].steps.find(
+    (step) => step.name === 'Install Playwright runtime dependencies',
+  ).run;
+  assert.match(playwrightRuntime, /ffmpeg-\$FFMPEG_REVISION/);
+  assert.doesNotMatch(playwrightRuntime, /playwright install ffmpeg/);
   assert.equal(playwright.jobs.e2e.needs, 'e2e-shards');
   assert.deepEqual(playwright.on.push.branches, ['main']);
 
