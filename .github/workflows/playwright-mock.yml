@@ -140,12 +140,17 @@ jobs:
         run: npm run build:client
 
       - name: Install Playwright runtime dependencies
-        # Ubuntu mirror latency can exceed five minutes while fetching font packages.
+        # Playwright expects FFmpeg under its revisioned cache path. The hosted runner
+        # already supplies FFmpeg, so link it instead of blocking on another CDN download.
         timeout-minutes: 15
         run: |
           google-chrome --version
           npx playwright install-deps chrome
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 npx playwright install ffmpeg
+          ffmpeg --version
+          FFMPEG_REVISION="$(node -e "const fs=require('fs'),path=require('path'); const root=path.dirname(require.resolve('playwright-core/package.json')); const browsers=JSON.parse(fs.readFileSync(path.join(root,'browsers.json'),'utf8')).browsers; process.stdout.write(browsers.find((browser)=>browser.name==='ffmpeg').revision)")"
+          FFMPEG_DIR="$HOME/.cache/ms-playwright/ffmpeg-$FFMPEG_REVISION"
+          mkdir -p "$FFMPEG_DIR"
+          ln -sf "$(command -v ffmpeg)" "$FFMPEG_DIR/ffmpeg-linux"
 
       - name: Run mock-LLM Tier-1 e2e
         run: npx playwright test --config=e2e/playwright.config.mock.ts --shard=${{ matrix.shard }}/2
