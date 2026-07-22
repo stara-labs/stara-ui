@@ -46,7 +46,7 @@ const imageFixture: UploadFixture = {
   name: 'provider-context.png',
   mimeType: 'image/png',
   buffer: Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWOQqzjxH4QZYAwAT0AJddjuTxMAAAAASUVORK5CYII=',
     'base64',
   ),
 };
@@ -67,15 +67,15 @@ async function openProviderFileChooser(page: Page) {
 async function uploadProviderFile(page: Page, fixture: UploadFixture) {
   const fileChooser = await openProviderFileChooser(page);
   const uploadResponsePromise = page.waitForResponse(
-    (response) =>
-      response.url().includes('/api/files') &&
-      response.request().method() === 'POST' &&
-      response.status() === 200,
+    (response) => response.url().includes('/api/files') && response.request().method() === 'POST',
     { timeout: 30000 },
   );
   await fileChooser.setFiles(fixture);
   const uploadResponse = await uploadResponsePromise;
-  expect(uploadResponse.ok()).toBeTruthy();
+  expect(
+    uploadResponse.ok(),
+    `Provider file upload failed with ${uploadResponse.status()} ${uploadResponse.statusText()}`,
+  ).toBeTruthy();
   await page.waitForTimeout(350);
   return uploadResponse;
 }
