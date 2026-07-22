@@ -49,6 +49,9 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
+const pathParam = (value: string | string[]): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
 export function createApiKeyHandlers(deps: ApiKeyHandlerDependencies): {
   createApiKey: (req: AuthenticatedRequest, res: Response) => Promise<Response | undefined>;
   listApiKeys: (req: AuthenticatedRequest, res: Response) => Promise<void>;
@@ -103,7 +106,11 @@ export function createApiKeyHandlers(deps: ApiKeyHandlerDependencies): {
     res: Response,
   ): Promise<Response | undefined> {
     try {
-      const key = await deps.getAgentApiKeyById(req.params.id, req.user?.id || '');
+      const keyId = pathParam(req.params.id);
+      if (!keyId) {
+        return res.status(404).json({ error: 'API key not found' });
+      }
+      const key = await deps.getAgentApiKeyById(keyId, req.user?.id || '');
 
       if (!key) {
         return res.status(404).json({ error: 'API key not found' });
@@ -121,7 +128,11 @@ export function createApiKeyHandlers(deps: ApiKeyHandlerDependencies): {
     res: Response,
   ): Promise<Response | undefined> {
     try {
-      const deleted = await deps.deleteAgentApiKey(req.params.id, req.user?.id || '');
+      const keyId = pathParam(req.params.id);
+      if (!keyId) {
+        return res.status(404).json({ error: 'API key not found' });
+      }
+      const deleted = await deps.deleteAgentApiKey(keyId, req.user?.id || '');
 
       if (!deleted) {
         return res.status(404).json({ error: 'API key not found' });

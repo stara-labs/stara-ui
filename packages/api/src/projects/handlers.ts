@@ -47,6 +47,9 @@ const queryString = (value: Request['query'][string]): string | undefined => {
   return undefined;
 };
 
+const pathParam = (value: string | string[]): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
 const normalizeString = (value: string | null | undefined): string =>
   typeof value === 'string' ? value.trim() : '';
 
@@ -127,11 +130,15 @@ export function createProjectHandlers(deps: ProjectHandlerDependencies): {
     req: ProjectRequest,
     res: Response,
   ): Promise<Response> {
-    const { conversationId } = req.params;
+    const conversationId = pathParam(req.params.conversationId);
     const projectId = req.body?.projectId ?? null;
 
     if (projectId !== null && typeof projectId !== 'string') {
       return res.status(400).json({ error: 'projectId must be a string or null' });
+    }
+
+    if (!conversationId) {
+      return res.status(404).json({ error: CONVERSATION_NOT_FOUND });
     }
 
     try {
@@ -154,8 +161,8 @@ export function createProjectHandlers(deps: ProjectHandlerDependencies): {
   }
 
   async function getProject(req: ProjectRequest, res: Response): Promise<Response> {
-    const { projectId } = req.params;
-    if (!isValidObjectIdString(projectId)) {
+    const projectId = pathParam(req.params.projectId);
+    if (!projectId || !isValidObjectIdString(projectId)) {
       return res.status(404).json({ error: PROJECT_NOT_FOUND });
     }
 
@@ -172,8 +179,8 @@ export function createProjectHandlers(deps: ProjectHandlerDependencies): {
   }
 
   async function updateProject(req: ProjectRequest, res: Response): Promise<Response> {
-    const { projectId } = req.params;
-    if (!isValidObjectIdString(projectId)) {
+    const projectId = pathParam(req.params.projectId);
+    if (!projectId || !isValidObjectIdString(projectId)) {
       return res.status(404).json({ error: PROJECT_NOT_FOUND });
     }
 
@@ -202,8 +209,8 @@ export function createProjectHandlers(deps: ProjectHandlerDependencies): {
   }
 
   async function deleteProject(req: ProjectRequest, res: Response): Promise<Response> {
-    const { projectId } = req.params;
-    if (!isValidObjectIdString(projectId)) {
+    const projectId = pathParam(req.params.projectId);
+    if (!projectId || !isValidObjectIdString(projectId)) {
       return res.status(404).json({ error: PROJECT_NOT_FOUND });
     }
 
