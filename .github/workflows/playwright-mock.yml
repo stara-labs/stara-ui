@@ -145,6 +145,7 @@ jobs:
         run: |
           google-chrome --version
           npx playwright install-deps chrome
+          npx playwright install ffmpeg
 
       - name: Run mock-LLM Tier-1 e2e
         run: npx playwright test --config=e2e/playwright.config.mock.ts --shard=${{ matrix.shard }}/2
