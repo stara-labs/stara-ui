@@ -112,8 +112,8 @@ beforeEach(() => {
 
 describe('StaraOnboardingView', () => {
   it('uses the recommended start instead of the generic login destination', () => {
-    expect(resolveCompletionRoute('/c/new', 'workflows')).toBe('/stara/workflows');
-    expect(resolveCompletionRoute(null, 'approvals')).toBe('/stara/approvals');
+    expect(resolveCompletionRoute('/c/new', 'workflows')).toBe('/c/new');
+    expect(resolveCompletionRoute(null, 'approvals')).toBe('/c/new');
   });
 
   it('preserves an explicit safe deep link after onboarding', () => {
@@ -144,7 +144,7 @@ describe('StaraOnboardingView', () => {
     fireEvent.change(screen.getByLabelText('Operating constraints'), {
       target: { value: 'PHI stays on approved secure routes' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Workflows and delivery/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Business workflows/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Create organization' }));
 
     await waitFor(() =>

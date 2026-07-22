@@ -4,6 +4,15 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import StaraControlPlaneView from '../StaraControlPlaneView';
 
+let mockEngineeringAccess = true;
+
+jest.mock('~/data-provider', () => ({
+  useStaraEngineeringContextQuery: () => ({
+    data: { platform_engineering_access: mockEngineeringAccess },
+    isLoading: false,
+  }),
+}));
+
 jest.mock('@librechat/client', () => ({
   useMediaQuery: () => false,
 }));
@@ -29,6 +38,10 @@ function renderSection(path: string) {
 }
 
 describe('StaraControlPlaneView', () => {
+  beforeEach(() => {
+    mockEngineeringAccess = true;
+  });
+
   it('redirects the legacy launcher route to the live workflows workspace', () => {
     renderSection('/stara/launcher');
 
@@ -48,5 +61,17 @@ describe('StaraControlPlaneView', () => {
 
     expect(screen.getByRole('heading', { name: 'Organization' })).toBeInTheDocument();
     expect(screen.getByText('Organization control')).toBeInTheDocument();
+  });
+
+  it('hides Stara development controls from customer organizations', () => {
+    mockEngineeringAccess = false;
+    renderSection('/stara/workflows');
+
+    expect(screen.getByRole('heading', { name: 'Organization' })).toBeInTheDocument();
+    expect(screen.getByText('Organization control')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Workflows' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Approvals' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Activity' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
   });
 });

@@ -4,6 +4,7 @@ const { callStaraApi, requireStaraUser, safeString } = require('~/server/service
 
 const MANAGER_ROLES = new Set(['owner', 'admin']);
 const TASK_ROLES = new Set(['owner', 'admin', 'member']);
+const ENGINEERING_READ_GRANT = 'stara.engineering.read';
 
 const requirePathId = (value, label) => {
   const id = safeString(value, undefined, 128);
@@ -26,7 +27,13 @@ const respondWithError = (res, label, error) => {
 
 const activeEngineeringContext = async (inputUser) => {
   const user = requireStaraUser(inputUser);
-  const response = await callStaraApi(user, '/v1/orgs');
+  const [account, response] = await Promise.all([
+    callStaraApi(user, '/v1/identity/sync', {
+      method: 'POST',
+      body: { display_name: safeString(user.name ?? user.username ?? user.email, 'Stara user') },
+    }),
+    callStaraApi(user, '/v1/orgs'),
+  ]);
   const activeTenantId = safeString(response.active_tenant_id);
   const activeEntry = (response.orgs ?? []).find(
     (entry) =>
@@ -36,9 +43,18 @@ const activeEngineeringContext = async (inputUser) => {
   );
 
   if (!activeTenantId || !activeEntry) {
-    return { user, activeTenantId: null, activeEntry: null };
+    return { user, activeTenantId: null, activeEntry: null, platformEngineeringAccess: false };
   }
-  return { user, activeTenantId, activeEntry };
+  const activeMembership = (account.memberships ?? []).find(
+    (membership) =>
+      membership?.tenant_key === activeTenantId &&
+      membership?.tenant_status === 'active' &&
+      membership?.membership_status === 'active',
+  );
+  const platformEngineeringAccess =
+    Array.isArray(activeMembership?.mcp_grants) &&
+    activeMembership.mcp_grants.includes(ENGINEERING_READ_GRANT);
+  return { user, activeTenantId, activeEntry, platformEngineeringAccess };
 };
 
 const requireActiveEngineeringContext = async (inputUser) => {
@@ -47,6 +63,12 @@ const requireActiveEngineeringContext = async (inputUser) => {
     const error = new Error('An active organization is required for engineering work');
     error.status = 409;
     error.code = 'engineering_active_org_required';
+    throw error;
+  }
+  if (!context.platformEngineeringAccess) {
+    const error = new Error('Platform engineering is not available to this organization');
+    error.status = 403;
+    error.code = 'platform_engineering_access_denied';
     throw error;
   }
   return context;
@@ -77,9 +99,32 @@ const getEngineeringContextController = async (req, res) => {
     const context = await activeEngineeringContext(req.user);
     if (!context.activeTenantId || !context.activeEntry) {
       return res.status(200).json({
+        platform_engineering_access: false,
         active_tenant_id: null,
         active_org_name: null,
         actor_role_key: null,
+        permissions: {
+          can_connect_repository: false,
+          can_create_task: false,
+          can_decide_approval: false,
+          can_update_policy: false,
+          can_update_business_profile: false,
+        },
+        repositories: [],
+        tasks: [],
+        approvals: [],
+        business_profile: null,
+        policy_config: null,
+        readiness: null,
+      });
+    }
+
+    if (!context.platformEngineeringAccess) {
+      return res.status(200).json({
+        platform_engineering_access: false,
+        active_tenant_id: context.activeTenantId,
+        active_org_name: safeString(context.activeEntry.org?.name, context.activeTenantId),
+        actor_role_key: safeString(context.activeEntry.membership?.role_key),
         permissions: {
           can_connect_repository: false,
           can_create_task: false,
@@ -120,6 +165,7 @@ const getEngineeringContextController = async (req, res) => {
     const roleKey = safeString(context.activeEntry.membership?.role_key);
 
     return res.status(200).json({
+      platform_engineering_access: true,
       active_tenant_id: context.activeTenantId,
       active_org_name: safeString(context.activeEntry.org?.name, context.activeTenantId),
       actor_role_key: roleKey,

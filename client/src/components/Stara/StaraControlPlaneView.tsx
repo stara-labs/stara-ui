@@ -9,6 +9,7 @@ import {
 } from './staraControlPlaneData';
 import StaraEngineeringWorkspace from './StaraEngineeringWorkspace';
 import StaraOrganizationControl from './StaraOrganizationControl';
+import { useStaraEngineeringContextQuery } from '~/data-provider';
 import OpenSidebar from '~/components/Chat/Menus/OpenSidebar';
 import { useDocumentTitle } from '~/hooks';
 import { cn } from '~/utils';
@@ -21,6 +22,9 @@ export default function StaraControlPlaneView() {
     () => staraSections.find((item) => item.id === resolvedSectionId),
     [resolvedSectionId],
   );
+  const engineeringQuery = useStaraEngineeringContextQuery({
+    enabled: resolvedSectionId !== 'organization',
+  });
 
   useDocumentTitle('Stara Control Plane | Stara');
 
@@ -32,6 +36,15 @@ export default function StaraControlPlaneView() {
   }
   if (resolvedSectionId !== section) {
     return <Navigate to={`/stara/${resolvedSectionId}`} replace />;
+  }
+  if (
+    resolvedSectionId !== 'organization' &&
+    (!engineeringQuery.data || !engineeringQuery.data.platform_engineering_access)
+  ) {
+    if (engineeringQuery.isLoading) {
+      return null;
+    }
+    return <Navigate to="/stara/organization" replace />;
   }
 
   const Icon = activeSection.icon;
@@ -56,22 +69,28 @@ export default function StaraControlPlaneView() {
               </div>
             </div>
             <nav className="flex gap-1 overflow-x-auto pb-1" aria-label="Stara sections">
-              {staraSections.map((item) => (
-                <RouterNavLink
-                  key={item.id}
-                  to={`/stara/${item.id}`}
-                  className={({ isActive }) =>
-                    cn(
-                      'whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'border-b-2 border-text-primary text-text-primary'
-                        : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
-                    )
-                  }
-                >
-                  {item.label}
-                </RouterNavLink>
-              ))}
+              {staraSections
+                .filter(
+                  (item) =>
+                    item.id === 'organization' ||
+                    engineeringQuery.data?.platform_engineering_access,
+                )
+                .map((item) => (
+                  <RouterNavLink
+                    key={item.id}
+                    to={`/stara/${item.id}`}
+                    className={({ isActive }) =>
+                      cn(
+                        'whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'border-b-2 border-text-primary text-text-primary'
+                          : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+                      )
+                    }
+                  >
+                    {item.label}
+                  </RouterNavLink>
+                ))}
             </nav>
           </header>
 

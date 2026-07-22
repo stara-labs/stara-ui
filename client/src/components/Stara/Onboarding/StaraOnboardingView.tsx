@@ -76,7 +76,7 @@ const personalOptions: Option[] = [
   {
     id: 'workflows',
     title: 'Automate governed work',
-    description: 'Begin with scoped tasks, checks, pull requests, and deployments.',
+    description: 'Begin with business workflows, delegated agents, and traceable outcomes.',
     icon: Route,
   },
   {
@@ -97,7 +97,8 @@ const businessOptions: Option[] = [
   {
     id: 'setup',
     title: 'Set up an org',
-    description: 'Create the canonical organization, become its owner, and configure delivery.',
+    description:
+      'Create the canonical organization, become its owner, and define business context.',
     icon: Building2,
   },
   {
@@ -117,8 +118,8 @@ const tenantFocusOptions: Option[] = [
   },
   {
     id: 'workflows',
-    title: 'Workflows and delivery',
-    description: 'Configure repositories, governed tasks, pull requests, and deployment gates.',
+    title: 'Business workflows',
+    description: 'Run repeatable processes with governed tools, agents, and evidence.',
     icon: Route,
   },
   {
@@ -131,10 +132,10 @@ const tenantFocusOptions: Option[] = [
 
 const startRoutes: Record<RecommendedStart, string> = {
   chat: '/c/new',
-  workflows: '/stara/workflows',
-  activity: '/stara/activity',
-  approvals: '/stara/approvals',
-  settings: '/stara/settings',
+  workflows: '/c/new',
+  activity: '/c/new',
+  approvals: '/c/new',
+  settings: '/stara/organization',
 };
 
 const startLabels: Record<RecommendedStart, string> = {
@@ -142,7 +143,7 @@ const startLabels: Record<RecommendedStart, string> = {
   workflows: 'workflows',
   activity: 'activity',
   approvals: 'approvals',
-  settings: 'settings',
+  settings: 'organization setup',
 };
 
 export const resolveCompletionRoute = (
@@ -329,7 +330,7 @@ export default function StaraOnboardingView() {
     ) {
       showToast({
         message:
-          'Organization, business context, outcomes, workflows, and delivery focus are required.',
+          'Organization, business context, outcomes, workflows, and business focus are required.',
         status: 'error',
       });
       return;
@@ -358,7 +359,7 @@ export default function StaraOnboardingView() {
   };
 
   const closeReview = () => {
-    navigate(safeRedirectTo || '/stara/settings');
+    navigate(safeRedirectTo || '/stara/organization');
   };
 
   const continueAfterComplete = () => {
@@ -515,7 +516,7 @@ export default function StaraOnboardingView() {
                 <StepPanel
                   eyebrow="Create organization"
                   title="Configure the business control plane"
-                  description="The organization becomes the canonical security boundary. You become its first owner and configure engineering access next."
+                  description="The organization becomes the canonical security boundary. You become its first owner and define the business processes Stara can support."
                   footer={
                     <StepActions
                       back={() => setPhase('businessPath')}
@@ -601,7 +602,7 @@ export default function StaraOnboardingView() {
                     </label>
                     <div>
                       <h3 className="text-sm font-semibold text-text-primary">
-                        First delivery focus
+                        First business focus
                       </h3>
                       <div className="mt-3">
                         <OptionGrid
@@ -645,7 +646,7 @@ export default function StaraOnboardingView() {
                 <StepPanel
                   eyebrow="Ready"
                   title="Stara onboarding is up to date"
-                  description={`Recommended start: ${startLabels[completedStart]}. You can rerun account onboarding or the active org addendum from Settings.`}
+                  description={`Recommended start: ${startLabels[completedStart]}. You can rerun account onboarding or the active org addendum from organization settings.`}
                   footer={
                     <div className="flex flex-wrap justify-end gap-2">
                       {reviewMode ? (
