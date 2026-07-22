@@ -30,7 +30,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
   afterAll(() => restoreEnv('STARA_API_URL', originalStaraApiUrl));
 
   it('loads live engineering state for the server-resolved active organization', async () => {
-    mockFetchJson(activeOrganizations());
+    mockPlatformContext();
     mockFetchJson({ repositories: [repository()] });
     mockFetchJson({ tasks: [taskAggregate()] });
     mockFetchJson({ approvals: [approval()] });
@@ -42,7 +42,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
     await getEngineeringContextController(makeReq(), res);
 
     expect(fetch).toHaveBeenNthCalledWith(
-      2,
+      3,
       'http://stara-api:3081/v1/engineering/repositories',
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -70,12 +70,13 @@ describe('StaraEngineeringController canonical API proxy', () => {
   });
 
   it('returns a deliberate empty state when no active organization exists', async () => {
+    mockFetchJson(canonicalAccount({ active_tenant_id: null, memberships: [] }));
     mockFetchJson({ active_tenant_id: null, orgs: [] });
     const res = makeRes();
 
     await getEngineeringContextController(makeReq(), res);
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         active_tenant_id: null,
@@ -86,8 +87,31 @@ describe('StaraEngineeringController canonical API proxy', () => {
     );
   });
 
-  it('keeps the workspace available while an older API has no business-profile route', async () => {
+  it('does not enumerate engineering resources for a customer organization', async () => {
+    mockFetchJson(
+      canonicalAccount({
+        memberships: [canonicalMembership({ mcp_grants: ['stara.memory.read'] })],
+      }),
+    );
     mockFetchJson(activeOrganizations());
+    const res = makeRes();
+
+    await getEngineeringContextController(makeReq(), res);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platform_engineering_access: false,
+        repositories: [],
+        tasks: [],
+        approvals: [],
+      }),
+    );
+  });
+
+  it('keeps the workspace available while an older API has no business-profile route', async () => {
+    mockPlatformContext();
     mockFetchJson({ repositories: [repository()] });
     mockFetchJson({ tasks: [taskAggregate()] });
     mockFetchJson({ approvals: [] });
@@ -105,7 +129,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
   });
 
   it('creates tasks under the canonical active tenant instead of browser tenant input', async () => {
-    mockFetchJson(activeOrganizations());
+    mockPlatformContext();
     mockFetchJson(taskAggregate());
     const payload = {
       idempotency_key: 'ui-task-00000001',
@@ -124,7 +148,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
     );
 
     expect(fetch).toHaveBeenNthCalledWith(
-      2,
+      3,
       'http://stara-api:3081/v1/engineering/tasks',
       expect.objectContaining({
         method: 'POST',
@@ -137,8 +161,26 @@ describe('StaraEngineeringController canonical API proxy', () => {
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
-  it('forwards bounded approval decisions and preserves canonical API failures', async () => {
+  it('rejects customer task creation before calling an engineering route', async () => {
+    mockFetchJson(
+      canonicalAccount({
+        memberships: [canonicalMembership({ mcp_grants: ['stara.actions.write'] })],
+      }),
+    );
     mockFetchJson(activeOrganizations());
+    const res = makeRes();
+
+    await createEngineeringTaskController(makeReq({ body: {} }), res);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'platform_engineering_access_denied' }),
+    );
+  });
+
+  it('forwards bounded approval decisions and preserves canonical API failures', async () => {
+    mockPlatformContext();
     mockFetchJson({
       aggregate: runAggregate(),
       review: { ...approval(), status: 'approved', decision: 'approved' },
@@ -156,7 +198,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
     await decideEngineeringRunController(makeReq({ params: { runId: run().id }, body }), res);
 
     expect(fetch).toHaveBeenNthCalledWith(
-      2,
+      3,
       `http://stara-api:3081/v1/engineering/runs/${run().id}/decisions`,
       expect.objectContaining({ method: 'POST', body: JSON.stringify(body) }),
     );
@@ -164,7 +206,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
   });
 
   it('updates business context for the server-resolved active organization', async () => {
-    mockFetchJson(activeOrganizations());
+    mockPlatformContext();
     mockFetchJson({ business_profile: businessProfile() });
     const res = makeRes();
     const body = {
@@ -177,7 +219,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
     await updateBusinessProfileController(makeReq({ body }), res);
 
     expect(fetch).toHaveBeenNthCalledWith(
-      2,
+      3,
       'http://stara-api:3081/v1/orgs/11111111-1111-4111-8111-111111111111/business-profile',
       expect.objectContaining({
         method: 'PUT',
@@ -191,7 +233,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
   });
 
   it('updates repository configuration under the server-resolved active organization', async () => {
-    mockFetchJson(activeOrganizations());
+    mockPlatformContext();
     mockFetchJson({
       repository: { ...repository(), version: 2 },
       action_version_id: 'action-repository-update',
@@ -216,7 +258,7 @@ describe('StaraEngineeringController canonical API proxy', () => {
     );
 
     expect(fetch).toHaveBeenNthCalledWith(
-      2,
+      3,
       `http://stara-api:3081/v1/engineering/repositories/${repository().id}`,
       expect.objectContaining({
         method: 'PATCH',
@@ -258,6 +300,33 @@ function mockFetchJson(payload, status = 200) {
     status,
     text: async () => JSON.stringify(payload),
   });
+}
+
+function canonicalMembership(overrides = {}) {
+  return {
+    tenant_id: '11111111-1111-4111-8111-111111111111',
+    tenant_key: '11111111-1111-4111-8111-111111111111',
+    tenant_status: 'active',
+    membership_status: 'active',
+    role_key: 'owner',
+    scope_ids: [],
+    mcp_grants: ['stara.engineering.read', 'stara.engineering.write', 'stara.engineering.approve'],
+    ...overrides,
+  };
+}
+
+function canonicalAccount(overrides = {}) {
+  return {
+    user: { id: '22222222-2222-4222-8222-222222222222' },
+    active_tenant_id: '11111111-1111-4111-8111-111111111111',
+    memberships: [canonicalMembership()],
+    ...overrides,
+  };
+}
+
+function mockPlatformContext() {
+  mockFetchJson(canonicalAccount());
+  mockFetchJson(activeOrganizations());
 }
 
 function activeOrganizations() {

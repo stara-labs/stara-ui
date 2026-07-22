@@ -115,6 +115,10 @@ export default function StaraEngineeringWorkspace({ view }: { view: StaraEnginee
     );
   }
 
+  if (!query.data.platform_engineering_access) {
+    return null;
+  }
+
   if (view === 'approvals') {
     return <ApprovalsView context={query.data} />;
   }

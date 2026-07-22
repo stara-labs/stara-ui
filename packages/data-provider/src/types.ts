@@ -623,6 +623,7 @@ export type TStaraEngineeringReadiness = {
 };
 
 export type TStaraEngineeringContext = {
+  platform_engineering_access: boolean;
   active_tenant_id: string | null;
   active_org_name: string | null;
   actor_role_key: StaraOrgRoleKey | null;
