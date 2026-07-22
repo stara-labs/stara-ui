@@ -149,12 +149,25 @@ const classifyAgentReferences = async (agentIds, userId, userRole) => {
  * yet. Only unauthorized (existing but unviewable) ids are returned.
  */
 const validateEdgeAgentAccess = async (edges, userId, userRole) => {
-  const { unauthorized } = await classifyAgentReferences(
+  const { missing, unauthorized } = await classifyAgentReferences(
     collectEdgeAgentIds(edges),
     userId,
     userRole,
   );
-  return unauthorized;
+  if (!canonicalAgentsEnabled()) {
+    return unauthorized;
+  }
+
+  /**
+   * Canonical agent reads deliberately return opaque 404 responses for both
+   * missing and unauthorized resources. Only unresolved source-only ids may
+   * represent the agent being created; every destination must resolve through
+   * the caller's canonical VIEW scope before the graph can be persisted.
+   */
+  const destinationIds = new Set(
+    edges.flatMap((edge) => (Array.isArray(edge.to) ? edge.to : [edge.to])).map(String),
+  );
+  return [...new Set([...unauthorized, ...missing.filter((id) => destinationIds.has(id))])];
 };
 
 /**
@@ -167,8 +180,16 @@ const validateEdgeAgentAccess = async (edges, userId, userRole) => {
  * Returning the split lets the caller report each bucket with the
  * appropriate status.
  */
-const validateSubagentReferences = (subagents, userId, userRole) =>
-  classifyAgentReferences(subagents?.agent_ids ?? [], userId, userRole);
+const validateSubagentReferences = async (subagents, userId, userRole) => {
+  const result = await classifyAgentReferences(subagents?.agent_ids ?? [], userId, userRole);
+  if (!canonicalAgentsEnabled()) {
+    return result;
+  }
+  return {
+    missing: [],
+    unauthorized: [...new Set([...result.unauthorized, ...result.missing])],
+  };
+};
 
 /**
  * Returns true when the agents-endpoint `subagents` capability is
