@@ -147,7 +147,7 @@ jobs:
           google-chrome --version
           npx playwright install-deps chrome
           sudo apt-get install --yes --no-install-recommends ffmpeg
-          ffmpeg --version
+          ffmpeg -version
           FFMPEG_REVISION="$(node -e "const fs=require('fs'),path=require('path'); const root=path.dirname(require.resolve('playwright-core/package.json')); const browsers=JSON.parse(fs.readFileSync(path.join(root,'browsers.json'),'utf8')).browsers; process.stdout.write(browsers.find((browser)=>browser.name==='ffmpeg').revision)")"
           FFMPEG_DIR="$HOME/.cache/ms-playwright/ffmpeg-$FFMPEG_REVISION"
           mkdir -p "$FFMPEG_DIR"
