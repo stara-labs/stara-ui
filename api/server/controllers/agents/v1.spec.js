@@ -2457,6 +2457,66 @@ describe('Agent Controllers - Mass Assignment Protection', () => {
       expect(response.agent_ids).toContain(targetAgent.id);
     });
 
+    test('createAgentHandler should fail opaque canonical destination lookups closed', async () => {
+      const db = require('~/models');
+      const previousCanonicalAgents = process.env.STARA_CANONICAL_AGENTS;
+      process.env.STARA_CANONICAL_AGENTS = 'true';
+      jest.spyOn(db, 'getAgents').mockResolvedValueOnce([]);
+
+      mockReq.body = {
+        name: 'Canonical Isolation Agent',
+        provider: 'openai',
+        model: 'gpt-4',
+        edges: [
+          { from: 'self_placeholder', to: targetAgent.id, edgeType: 'handoff' },
+          { from: targetAgent.id, to: 'agent_private_nested', edgeType: 'handoff' },
+        ],
+      };
+
+      try {
+        await createAgentHandler(mockReq, mockRes);
+      } finally {
+        if (previousCanonicalAgents === undefined) {
+          delete process.env.STARA_CANONICAL_AGENTS;
+        } else {
+          process.env.STARA_CANONICAL_AGENTS = previousCanonicalAgents;
+        }
+      }
+
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+      const response = mockRes.json.mock.calls[0][0];
+      expect(response.agent_ids).toEqual(
+        expect.arrayContaining([targetAgent.id, 'agent_private_nested']),
+      );
+      expect(mockRes.status).not.toHaveBeenCalledWith(201);
+    });
+
+    test('createAgentHandler should allow an unresolved source-only placeholder in canonical mode', async () => {
+      const previousCanonicalAgents = process.env.STARA_CANONICAL_AGENTS;
+      process.env.STARA_CANONICAL_AGENTS = 'true';
+      const permMap = new Map([[targetAgent._id.toString(), PermissionBits.VIEW]]);
+      getResourcePermissionsMap.mockResolvedValueOnce(permMap);
+
+      mockReq.body = {
+        name: 'Canonical Source Placeholder Agent',
+        provider: 'openai',
+        model: 'gpt-4',
+        edges: [{ from: 'self_placeholder', to: targetAgent.id, edgeType: 'handoff' }],
+      };
+
+      try {
+        await createAgentHandler(mockReq, mockRes);
+      } finally {
+        if (previousCanonicalAgents === undefined) {
+          delete process.env.STARA_CANONICAL_AGENTS;
+        } else {
+          process.env.STARA_CANONICAL_AGENTS = previousCanonicalAgents;
+        }
+      }
+
+      expect(mockRes.status).toHaveBeenCalledWith(201);
+    });
+
     test('createAgentHandler should succeed when user has VIEW on all edge-referenced agents', async () => {
       const permMap = new Map([[targetAgent._id.toString(), 1]]);
       getResourcePermissionsMap.mockResolvedValueOnce(permMap);
