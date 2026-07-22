@@ -437,6 +437,72 @@ describe('initializeClient — subagent loading', () => {
     return agent;
   };
 
+  it('omits a configured subagent when the caller lacks VIEW access', async () => {
+    await createAgent({
+      id: SUBAGENT_ID,
+      name: 'Private Subagent',
+      provider: 'openai',
+      model: 'gpt-4',
+      author: new mongoose.Types.ObjectId(),
+      tools: [],
+    });
+
+    const primaryConfig = makePrimaryConfig({
+      subagents: { enabled: true, allowSelf: false, agent_ids: [SUBAGENT_ID] },
+    });
+    mockInitializeAgent.mockResolvedValue(primaryConfig);
+
+    await initializeClient({
+      req: makeSubagentReq(),
+      res: {},
+      signal: new AbortController().signal,
+      endpointOption: makeEndpointOption(),
+    });
+
+    expect(mockInitializeAgent).toHaveBeenCalledTimes(1);
+    expect(agentClientArgs.agent.subagentAgentConfigs).toEqual([]);
+    expect(agentClientArgs.agentConfigs.has(SUBAGENT_ID)).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining(`lacks VIEW access to subagent ${SUBAGENT_ID}`),
+    );
+  });
+
+  it('omits an unauthorized nested subagent from an authorized delegated agent', async () => {
+    await createViewableAgent(SUBAGENT_ID);
+    const privateNestedId = 'agent_private_nested';
+    await createAgent({
+      id: privateNestedId,
+      name: 'Private Nested Subagent',
+      provider: 'openai',
+      model: 'gpt-4',
+      author: new mongoose.Types.ObjectId(),
+      tools: [],
+    });
+
+    const primaryConfig = makePrimaryConfig({
+      subagents: { enabled: true, allowSelf: false, agent_ids: [SUBAGENT_ID] },
+    });
+    const authorizedChildConfig = makeNestedSubagentConfig(SUBAGENT_ID, [privateNestedId]);
+    mockInitializeAgent.mockImplementation(({ agent }) =>
+      Promise.resolve(agent.id === PRIMARY_ID ? primaryConfig : authorizedChildConfig),
+    );
+
+    await initializeClient({
+      req: makeSubagentReq(),
+      res: {},
+      signal: new AbortController().signal,
+      endpointOption: makeEndpointOption(),
+    });
+
+    expect(mockInitializeAgent).toHaveBeenCalledTimes(2);
+    expect(agentClientArgs.agent.subagentAgentConfigs).toEqual([authorizedChildConfig]);
+    expect(authorizedChildConfig.subagentAgentConfigs).toEqual([]);
+    expect(agentClientArgs.agentConfigs.has(privateNestedId)).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining(`lacks VIEW access to subagent ${privateNestedId}`),
+    );
+  });
+
   it('loads a configured subagent, populates `subagentAgentConfigs`, and keeps it out of `agentConfigs`', async () => {
     const subAgent = await createAgent({
       id: SUBAGENT_ID,
